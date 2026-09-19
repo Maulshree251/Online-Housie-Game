@@ -148,19 +148,28 @@ function testDuplicateAnnouncement(): void {
   console.log("✅ Duplicate announcement test passed");
 }
 
+
 function testPlayerCannotJoinAfterStart(): void {
   const engine = new GameEngine();
 
+  // Add a player before starting the game.
+  engine.addPlayerTicket(
+    "player-1",
+    createTestTicket()
+  );
+
+  // Start the game successfully.
   engine.startGame();
 
+  // Try to join after the game has started.
   assert.throws(
     () => {
       engine.addPlayerTicket(
-        "player-1",
+        "player-2",
         createTestTicket()
       );
     },
-    /cannot join after the game has started/
+    /Players cannot join after the game has started/
   );
 
   console.log("✅ Join restriction test passed");
@@ -257,6 +266,50 @@ function testFullHouseCompletesGame(): void {
 }
 
 
+function testGameStartsWithWaitingStatus(): void {
+  const engine = new GameEngine();
+
+  assert.strictEqual(
+    engine.getGame().status,
+    "WAITING"
+  );
+
+  console.log("✅ Game starts with WAITING status test passed");
+}
+
+
+function testCannotStartEmptyGame(): void {
+  const engine = new GameEngine();
+
+  assert.throws(() => {
+    engine.startGame();
+  }, /At least one player is required/);
+
+  console.log("✅ Cannot start empty game test passed");
+}
+
+
+function testGameStoresStartTime(): void {
+  const engine = new GameEngine();
+
+  engine.addPlayerTicket(
+    "player1",
+    createTestTicket()
+  );
+
+  engine.startGame();
+
+  assert.strictEqual(
+    engine.getGame().status,
+    "ACTIVE"
+  );
+
+  assert.ok(
+    engine.getGame().startedAt instanceof Date
+  );
+
+  console.log("✅ Game stores start time test passed");
+}
 
 
 function runTests(): void {
@@ -271,6 +324,9 @@ function runTests(): void {
   testInvalidTicketRejected();
   testWinnerCategoryCanBeClaimedOnlyOnce();
   testFullHouseCompletesGame();
+  testGameStartsWithWaitingStatus();
+  testCannotStartEmptyGame();
+  testGameStoresStartTime();
 
   console.log("\n🎉 All tests passed!\n");
 }

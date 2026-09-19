@@ -4,11 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "build": "tsc",
-  "start": "node dist/server.js",
-  "dev": "ts-node src/server.ts",
-  "test": "ts-node src/tests/gameEngine.test.ts"
-},
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "test": "ts-node src/tests/gameEngine.test.ts"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -22,7 +22,10 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "dotenv": "^18.0.1",
     "express": "^5.2.1",
-    "socket.io": "^4.8.3"
+    "mongoose": "^9.10.1",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   }
 }

@@ -1,15 +1,19 @@
 
 import { GameEngine } from "./gameEngine";
+import { GameRepository } from "../repositories/gameRepository";
 
 export class GameManager {
   private games: Map<string, GameEngine>;
+  private gameRepository: GameRepository;
 
-  constructor() {
+  constructor(gameRepository: GameRepository = new GameRepository()) {
     this.games = new Map<string, GameEngine>();
+    this.gameRepository = gameRepository;
   }
 
-  // Create a new game
+
   public createGame(): GameEngine {
+    console.log("⚠️ createGame() called");
     const gameEngine = new GameEngine();
 
     const gameId = gameEngine.getGame().id;
@@ -19,7 +23,7 @@ export class GameManager {
     return gameEngine;
   }
 
-  // Find a game using its ID
+
   public getGame(gameId: string): GameEngine {
     const gameEngine = this.games.get(gameId);
 
@@ -30,22 +34,58 @@ export class GameManager {
     return gameEngine;
   }
 
-  // Check whether a game exists
+
   public hasGame(gameId: string): boolean {
     return this.games.has(gameId);
   }
 
-  // Remove a game
-  public removeGame(gameId: string): void {
-    const removed = this.games.delete(gameId);
 
-    if (!removed) {
-      throw new Error("Game not found.");
-    }
+  public removeGame(gameId: string): boolean {
+    return this.games.delete(gameId);
   }
 
-  // Get the number of active game sessions
-  public getGameCount(): number {
-    return this.games.size;
+
+  public getAllGames(): GameEngine[] {
+    return Array.from(this.games.values());
+  }
+
+
+  public async saveGame(gameId: string): Promise<void> {
+    const gameEngine = this.getGame(gameId);
+
+    await this.gameRepository.save(
+      gameEngine.getGame()
+    );
+  }
+
+
+  public async loadGame(gameId: string): Promise<GameEngine> {
+    const game = await this.gameRepository.findById(gameId);
+
+    if (!game) {
+      throw new Error("Game not found in database.");
+    }
+
+    const gameEngine = GameEngine.fromGame(game);
+
+    this.games.set(gameId, gameEngine);
+
+    return gameEngine;
+  }
+
+
+  public async recoverGames(): Promise<void> {
+    const games =
+      await this.gameRepository.findRecoverableGames();
+
+    for (const game of games) {
+      const gameEngine = GameEngine.fromGame(game);
+
+      this.games.set(game.id, gameEngine);
+    }
+
+    console.log(
+      `Recovered ${games.length} game(s) from MongoDB.`
+    );
   }
 }

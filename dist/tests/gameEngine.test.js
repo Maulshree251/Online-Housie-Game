@@ -80,10 +80,14 @@ function testDuplicateAnnouncement() {
 }
 function testPlayerCannotJoinAfterStart() {
     const engine = new gameEngine_1.GameEngine();
+    // Add a player before starting the game.
+    engine.addPlayerTicket("player-1", createTestTicket());
+    // Start the game successfully.
     engine.startGame();
+    // Try to join after the game has started.
     assert_1.default.throws(() => {
-        engine.addPlayerTicket("player-1", createTestTicket());
-    }, /cannot join after the game has started/);
+        engine.addPlayerTicket("player-2", createTestTicket());
+    }, /Players cannot join after the game has started/);
     console.log("✅ Join restriction test passed");
 }
 function testInvalidTicketRejected() {
@@ -127,6 +131,26 @@ function testFullHouseCompletesGame() {
     assert_1.default.strictEqual(engine.getGame().status, "COMPLETED");
     console.log("✅ Full House completion test passed");
 }
+function testGameStartsWithWaitingStatus() {
+    const engine = new gameEngine_1.GameEngine();
+    assert_1.default.strictEqual(engine.getGame().status, "WAITING");
+    console.log("✅ Game starts with WAITING status test passed");
+}
+function testCannotStartEmptyGame() {
+    const engine = new gameEngine_1.GameEngine();
+    assert_1.default.throws(() => {
+        engine.startGame();
+    }, /At least one player is required/);
+    console.log("✅ Cannot start empty game test passed");
+}
+function testGameStoresStartTime() {
+    const engine = new gameEngine_1.GameEngine();
+    engine.addPlayerTicket("player1", createTestTicket());
+    engine.startGame();
+    assert_1.default.strictEqual(engine.getGame().status, "ACTIVE");
+    assert_1.default.ok(engine.getGame().startedAt instanceof Date);
+    console.log("✅ Game stores start time test passed");
+}
 function runTests() {
     console.log("\n===== GAME ENGINE TESTS =====\n");
     testFirstFiveClaim();
@@ -138,6 +162,9 @@ function runTests() {
     testInvalidTicketRejected();
     testWinnerCategoryCanBeClaimedOnlyOnce();
     testFullHouseCompletesGame();
+    testGameStartsWithWaitingStatus();
+    testCannotStartEmptyGame();
+    testGameStoresStartTime();
     console.log("\n🎉 All tests passed!\n");
 }
 runTests();

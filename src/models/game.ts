@@ -1,3 +1,4 @@
+
 import { Ticket } from "./ticket";
 
 export type GameStatus = "WAITING" | "ACTIVE" | "COMPLETED";
@@ -21,11 +22,24 @@ export interface Winner {
   wonAt: Date;
 }
 
+export interface GameConfig {
+  maxPlayers: number;
+  durationInMinutes: number;
+}
+
 export interface Game {
   id: string;
   status: GameStatus;
+
+  createdAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+
+  config: GameConfig;
+
   announcedNumbers: number[];
   remainingNumbers: number[];
+
   playerTickets: PlayerTicket[];
   winners: Winner[];
 }
