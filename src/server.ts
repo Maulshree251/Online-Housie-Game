@@ -16,6 +16,10 @@ const io = new Server(httpServer, {
 
 const gameEngine = new GameEngine();
 
+let hostPlayerId: string | null = null;
+
+const socketPlayers = new Map<string, string>();
+
 const PORT = 3000;
 
 app.get("/", (_req, res) => {
@@ -25,74 +29,205 @@ app.get("/", (_req, res) => {
 io.on("connection", (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
-  socket.on(
-    "game:join",
-    (data: { playerId: string; ticket: Ticket }) => {
-      try {
-        gameEngine.addPlayerTicket(
-          data.playerId,
-          data.ticket
-        );
+  
+socket.on(
+  "game:join",
+  (data: { playerId: string; ticket: Ticket }) => {
+    try {
+      if (socketPlayers.has(socket.id)) {
+        throw new Error("This socket has already joined.");
+      }
 
-        socket.join(gameEngine.getGame().id);
+      gameEngine.addPlayerTicket(
+        data.playerId,
+        data.ticket
+      );
 
-        socket.emit("game:state", getSafeGameState());
+      socketPlayers.set(socket.id, data.playerId);
 
-        io.emit("game:playerJoined", {
+      if (hostPlayerId === null) {
+        hostPlayerId = data.playerId;
+
+        socket.emit("game:hostAssigned", {
           playerId: data.playerId,
         });
 
         console.log(
-          `Player ${data.playerId} joined the game.`
+          `Host assigned: ${data.playerId}`
         );
-      } catch (error) {
-        sendError(socket, error);
       }
-    }
-  );
 
-  socket.on("game:start", () => {
-    try {
-      gameEngine.startGame();
+      socket.join(gameEngine.getGame().id);
 
-      io.emit("game:started", {
-        gameId: gameEngine.getGame().id,
+      socket.emit("game:state", getSafeGameState());
+
+      io.emit("game:playerJoined", {
+        playerId: data.playerId,
       });
 
-      io.emit("game:state", getSafeGameState());
-
-      console.log("Game started.");
+      console.log(
+        `Player ${data.playerId} joined the game.`
+      );
     } catch (error) {
       sendError(socket, error);
     }
-  });
+  }
+);
 
-  socket.on("game:announce", () => {
-    try {
-      const number = gameEngine.announceNextNumber();
+  
+socket.on("game:start", () => {
+  try {
+    requireHost(socket);
 
-      io.emit("game:numberAnnounced", {
-        number,
-        announcedNumbers:
-          gameEngine.getGame().announcedNumbers,
-      });
+    gameEngine.startGame();
 
-      io.emit("game:state", getSafeGameState());
+    io.emit("game:started", {
+      gameId: gameEngine.getGame().id,
+    });
 
-      console.log(`Number announced: ${number}`);
-    } catch (error) {
-      sendError(socket, error);
-    }
-  });
+    io.emit("game:state", getSafeGameState());
+
+    console.log("Game started.");
+  } catch (error) {
+    sendError(socket, error);
+  }
+});
+
+  
+socket.on("game:announce", () => {
+  try {
+    requireHost(socket);
+
+    const number = gameEngine.announceNextNumber();
+
+    io.emit("game:numberAnnounced", {
+      number,
+      announcedNumbers:
+        gameEngine.getGame().announcedNumbers,
+    });
+
+    io.emit("game:state", getSafeGameState());
+
+    console.log(`Number announced: ${number}`);
+  } catch (error) {
+    sendError(socket, error);
+  }
+});
 
   socket.on("game:getState", () => {
     socket.emit("game:state", getSafeGameState());
   });
 
-  socket.on("disconnect", () => {
-    console.log(`Player disconnected: ${socket.id}`);
-  });
+  
+socket.on("disconnect", () => {
+  const playerId = socketPlayers.get(socket.id);
+
+  socketPlayers.delete(socket.id);
+
+  console.log(
+    `Player disconnected: ${playerId ?? socket.id}`
+  );
 });
+
+  
+
+socket.on(
+  "game:markNumber",
+  (data: { number: number }) => {
+    try {
+      const playerId = getConnectedPlayerId(socket);
+
+      gameEngine.markNumber(
+        playerId,
+        data.number
+      );
+
+      socket.emit("game:numberMarked", {
+        playerId,
+        number: data.number,
+      });
+
+      console.log(
+        `Player ${playerId} marked number ${data.number}.`
+      );
+    } catch (error) {
+      sendError(socket, error);
+    }
+  }
+);
+
+
+
+socket.on(
+  "game:claimWinner",
+  (data: {
+    winnerType:
+      | "FIRST_5"
+      | "ONE_LINE"
+      | "TWO_LINES"
+      | "THREE_LINES"
+      | "FULL_HOUSE";
+  }) => {
+    try {
+      const playerId = getConnectedPlayerId(socket);
+
+      const isWinner = gameEngine.claimWinner(
+        playerId,
+        data.winnerType
+      );
+
+      if (!isWinner) {
+        socket.emit("game:claimRejected", {
+          playerId,
+          winnerType: data.winnerType,
+          reason:
+            "Winning condition has not been completed.",
+        });
+
+        return;
+      }
+
+      io.emit("game:winnerDeclared", {
+        playerId,
+        winnerType: data.winnerType,
+      });
+
+      io.emit("game:state", getSafeGameState());
+
+      console.log(
+        `Winner declared: ${playerId} - ${data.winnerType}`
+      );
+    } catch (error) {
+      sendError(socket, error);
+    }
+  }
+);
+});
+
+
+function getConnectedPlayerId(
+  socket: Socket
+): string {
+  const playerId = socketPlayers.get(socket.id);
+
+  if (!playerId) {
+    throw new Error("You must join the game first.");
+  }
+
+  return playerId;
+}
+
+function requireHost(socket: Socket): string {
+  const playerId = getConnectedPlayerId(socket);
+
+  if (playerId !== hostPlayerId) {
+    throw new Error(
+      "Only the game host can perform this action."
+    );
+  }
+
+  return playerId;
+}
 
 function getSafeGameState() {
   const game = gameEngine.getGame();

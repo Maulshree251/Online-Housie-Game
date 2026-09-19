@@ -193,6 +193,41 @@ function testInvalidTicketRejected(): void {
   console.log("✅ Invalid ticket rejection test passed");
 }
 
+
+function testWinnerCategoryCanBeClaimedOnlyOnce(): void {
+  const engine = createEngineWithPlayers();
+
+  const numbers = [1, 10, 20, 30, 40];
+
+  announceNumbers(engine, numbers);
+
+  markNumbers(engine, "player-1", numbers);
+  markNumbers(engine, "player-2", numbers);
+
+  const firstClaim = engine.claimWinner(
+    "player-1",
+    "FIRST_5"
+  );
+
+  assert.strictEqual(firstClaim, true);
+
+  assert.throws(
+    () => {
+      engine.claimWinner("player-2", "FIRST_5");
+    },
+    /already been claimed/
+  );
+
+  assert.strictEqual(
+    engine.getGame().winners.length,
+    1
+  );
+
+  console.log(
+    "✅ One-winner-per-category test passed"
+  );
+}
+
 function testFullHouseCompletesGame(): void {
   const engine = createEngineWithPlayers();
 
@@ -234,6 +269,7 @@ function runTests(): void {
   testDuplicateAnnouncement();
   testPlayerCannotJoinAfterStart();
   testInvalidTicketRejected();
+  testWinnerCategoryCanBeClaimedOnlyOnce();
   testFullHouseCompletesGame();
 
   console.log("\n🎉 All tests passed!\n");
