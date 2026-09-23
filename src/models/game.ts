@@ -30,6 +30,7 @@ export interface GameConfig {
 export interface Game {
   id: string;
   status: GameStatus;
+  hostPlayerId: string | null;
 
   createdAt: Date;
   startedAt: Date | null;
@@ -42,4 +43,5 @@ export interface Game {
 
   playerTickets: PlayerTicket[];
   winners: Winner[];
+
 }

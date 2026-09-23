@@ -37,7 +37,7 @@ export class GameEngine {
       id: randomUUID(),
 
       status: "WAITING",
-
+      hostPlayerId: null,
       createdAt: new Date(),
       startedAt: null,
       completedAt: null,
@@ -53,6 +53,30 @@ export class GameEngine {
       playerTickets: [],
       winners: [],
     };
+  }
+
+  public assignHost(playerId: string): void {
+    if (this.game.status !== "WAITING") {
+      throw new Error("Host can only be assigned before the game starts.");
+    }
+
+    if (this.game.hostPlayerId !== null) {
+      throw new Error("Game already has a host.");
+    }
+
+    const playerExists = this.game.playerTickets.some(
+      player => player.playerId === playerId
+    );
+
+    if (!playerExists) {
+      throw new Error("Player must join the game before becoming host.");
+    }
+
+    this.game.hostPlayerId = playerId;
+  }
+
+  public getHostPlayerId(): string | null {
+    return this.game.hostPlayerId;
   }
 
   private shuffle(numbers: number[]): number[] {

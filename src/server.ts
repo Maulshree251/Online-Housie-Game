@@ -39,8 +39,7 @@ interface ConnectedPlayer {
 
 const socketPlayers = new Map<string, ConnectedPlayer>();
 
-// Stores the host of each game
-const gameHosts = new Map<string, string>();
+
 
 
 // --------------------------------------------------
@@ -66,10 +65,12 @@ function getConnectedPlayer(socket: Socket): ConnectedPlayer {
 function requireHost(socket: Socket, gameId: string): string {
   const { playerId } = getConnectedPlayer(socket);
 
-  const hostPlayerId = gameHosts.get(gameId);
+  const gameEngine = gameManager.getGame(gameId);
 
-  if (playerId !== hostPlayerId) {
-    throw new Error("Only the game host can perform this action.");
+  if (playerId !== gameEngine.getHostPlayerId()) {
+    throw new Error(
+      "Only the game host can perform this action."
+    );
   }
 
   return playerId;
@@ -162,6 +163,15 @@ io.on("connection", (socket: Socket) => {
         const gameEngine = gameManager.getGame(gameId);
 
         gameEngine.addPlayerTicket(playerId, ticket);
+
+        if (gameEngine.getHostPlayerId() === null) {
+          gameEngine.assignHost(playerId);
+
+          socket.emit("game:hostAssigned", {
+            gameId,
+            playerId,
+          });
+        }
         await saveGameState(gameId);
 
         socketPlayers.set(socket.id, {
@@ -169,15 +179,15 @@ io.on("connection", (socket: Socket) => {
           gameId,
         });
 
-        // Assign the first successful player as host
-        if (!gameHosts.has(gameId)) {
-          gameHosts.set(gameId, playerId);
+        // // Assign the first successful player as host
+        // if (!gameHosts.has(gameId)) {
+        //   gameHosts.set(gameId, playerId);
 
-          socket.emit("game:hostAssigned", {
-            gameId,
-            playerId,
-          });
-        }
+        //   socket.emit("game:hostAssigned", {
+        //     gameId,
+        //     playerId,
+        //   });
+        // }
 
         const room = getGameRoom(gameId);
 
@@ -235,7 +245,11 @@ io.on("connection", (socket: Socket) => {
       requireHost(socket, gameId);
 
       const gameEngine = gameManager.getGame(gameId);
+      if (gameEngine.expireGameIfNeeded()) {
+        await saveGameState(gameId);
 
+        throw new Error("Game duration has ended.");
+      }
       const number = gameEngine.announceNextNumber();
       await saveGameState(gameId);
       const room = getGameRoom(gameId);
@@ -288,7 +302,11 @@ io.on("connection", (socket: Socket) => {
         }
 
         const gameEngine = gameManager.getGame(gameId);
+        if (gameEngine.expireGameIfNeeded()) {
+          await saveGameState(gameId);
 
+          throw new Error("Game duration has ended.");
+        }
         gameEngine.markNumber(connectedPlayer.playerId, number);
         await saveGameState(gameId);
         socket.emit("game:numberMarked", {
@@ -324,7 +342,11 @@ io.on("connection", (socket: Socket) => {
         }
 
         const gameEngine = gameManager.getGame(gameId);
+        if (gameEngine.expireGameIfNeeded()) {
+          await saveGameState(gameId);
 
+          throw new Error("Game duration has ended.");
+        }
         const isWinner = gameEngine.claimWinner(
           connectedPlayer.playerId,
           winnerType

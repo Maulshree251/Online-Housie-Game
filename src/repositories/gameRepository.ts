@@ -11,7 +11,7 @@ function gameToDatabase(game: Game) {
     return {
         id: game.id,
         status: game.status,
-
+        hostPlayerId: game.hostPlayerId,
         createdAt: game.createdAt,
         startedAt: game.startedAt,
         completedAt: game.completedAt,
@@ -38,7 +38,7 @@ function databaseToGame(document: any): Game {
     return {
         id: document.id,
         status: document.status,
-
+        hostPlayerId: document.hostPlayerId ?? null,
         createdAt: new Date(document.createdAt),
         startedAt: document.startedAt
             ? new Date(document.startedAt)

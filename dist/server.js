@@ -25,8 +25,6 @@ async function saveGameState(gameId) {
 }
 const PORT = 3000;
 const socketPlayers = new Map();
-// Stores the host of each game
-const gameHosts = new Map();
 // --------------------------------------------------
 // HELPER FUNCTIONS
 // --------------------------------------------------
@@ -42,8 +40,8 @@ function getConnectedPlayer(socket) {
 }
 function requireHost(socket, gameId) {
     const { playerId } = getConnectedPlayer(socket);
-    const hostPlayerId = gameHosts.get(gameId);
-    if (playerId !== hostPlayerId) {
+    const gameEngine = gameManager.getGame(gameId);
+    if (playerId !== gameEngine.getHostPlayerId()) {
         throw new Error("Only the game host can perform this action.");
     }
     return playerId;
@@ -84,6 +82,7 @@ io.on("connection", (socket) => {
         try {
             const gameEngine = gameManager.createGame();
             const game = gameEngine.getGame();
+            await gameManager.saveGame(game.id);
             socket.emit("game:created", {
                 gameId: game.id,
             });
@@ -103,19 +102,26 @@ io.on("connection", (socket) => {
             }
             const gameEngine = gameManager.getGame(gameId);
             gameEngine.addPlayerTicket(playerId, ticket);
-            await saveGameState(gameId);
-            socketPlayers.set(socket.id, {
-                playerId,
-                gameId,
-            });
-            // Assign the first successful player as host
-            if (!gameHosts.has(gameId)) {
-                gameHosts.set(gameId, playerId);
+            if (gameEngine.getHostPlayerId() === null) {
+                gameEngine.assignHost(playerId);
                 socket.emit("game:hostAssigned", {
                     gameId,
                     playerId,
                 });
             }
+            await saveGameState(gameId);
+            socketPlayers.set(socket.id, {
+                playerId,
+                gameId,
+            });
+            // // Assign the first successful player as host
+            // if (!gameHosts.has(gameId)) {
+            //   gameHosts.set(gameId, playerId);
+            //   socket.emit("game:hostAssigned", {
+            //     gameId,
+            //     playerId,
+            //   });
+            // }
             const room = getGameRoom(gameId);
             socket.join(room);
             socket.emit("game:state", getSafeGameState(gameId));
@@ -156,6 +162,10 @@ io.on("connection", (socket) => {
         try {
             requireHost(socket, gameId);
             const gameEngine = gameManager.getGame(gameId);
+            if (gameEngine.expireGameIfNeeded()) {
+                await saveGameState(gameId);
+                throw new Error("Game duration has ended.");
+            }
             const number = gameEngine.announceNextNumber();
             await saveGameState(gameId);
             const room = getGameRoom(gameId);
@@ -191,6 +201,10 @@ io.on("connection", (socket) => {
                 throw new Error("You are not connected to this game.");
             }
             const gameEngine = gameManager.getGame(gameId);
+            if (gameEngine.expireGameIfNeeded()) {
+                await saveGameState(gameId);
+                throw new Error("Game duration has ended.");
+            }
             gameEngine.markNumber(connectedPlayer.playerId, number);
             await saveGameState(gameId);
             socket.emit("game:numberMarked", {
@@ -213,6 +227,10 @@ io.on("connection", (socket) => {
                 throw new Error("You are not connected to this game.");
             }
             const gameEngine = gameManager.getGame(gameId);
+            if (gameEngine.expireGameIfNeeded()) {
+                await saveGameState(gameId);
+                throw new Error("Game duration has ended.");
+            }
             const isWinner = gameEngine.claimWinner(connectedPlayer.playerId, winnerType);
             const room = getGameRoom(gameId);
             if (!isWinner) {
@@ -253,6 +271,7 @@ io.on("connection", (socket) => {
 // --------------------------------------------------
 async function startServer() {
     await (0, connection_1.connectDatabase)();
+    await gameManager.recoverGames();
     httpServer.listen(PORT, () => {
         console.log(`Server running at http://localhost:${PORT}`);
     });

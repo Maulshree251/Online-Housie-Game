@@ -21,6 +21,7 @@ class GameEngine {
         return {
             id: (0, crypto_1.randomUUID)(),
             status: "WAITING",
+            hostPlayerId: null,
             createdAt: new Date(),
             startedAt: null,
             completedAt: null,
@@ -33,6 +34,22 @@ class GameEngine {
             playerTickets: [],
             winners: [],
         };
+    }
+    assignHost(playerId) {
+        if (this.game.status !== "WAITING") {
+            throw new Error("Host can only be assigned before the game starts.");
+        }
+        if (this.game.hostPlayerId !== null) {
+            throw new Error("Game already has a host.");
+        }
+        const playerExists = this.game.playerTickets.some(player => player.playerId === playerId);
+        if (!playerExists) {
+            throw new Error("Player must join the game before becoming host.");
+        }
+        this.game.hostPlayerId = playerId;
+    }
+    getHostPlayerId() {
+        return this.game.hostPlayerId;
     }
     shuffle(numbers) {
         const shuffled = [...numbers];

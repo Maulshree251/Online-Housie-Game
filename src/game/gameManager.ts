@@ -81,11 +81,29 @@ export class GameManager {
     for (const game of games) {
       const gameEngine = GameEngine.fromGame(game);
 
+      if (gameEngine.isGameExpired()) {
+        gameEngine.expireGameIfNeeded();
+
+        await this.gameRepository.save(
+          gameEngine.getGame()
+        );
+
+        console.log(
+          `Game ${game.id} expired during recovery.`
+        );
+
+        continue;
+      }
+
       this.games.set(game.id, gameEngine);
+
+      console.log(
+        `Recovered game ${game.id} (${game.status}).`
+      );
     }
 
     console.log(
-      `Recovered ${games.length} game(s) from MongoDB.`
+      `Recovered ${this.games.size} active/waiting game(s).`
     );
   }
 }

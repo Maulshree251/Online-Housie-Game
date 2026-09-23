@@ -81,7 +81,10 @@ const gameSchema = new Schema(
             enum: ["WAITING", "ACTIVE", "COMPLETED"],
             required: true,
         },
-
+        hostPlayerId: {
+            type: String,
+            default: null,
+        },
         createdAt: {
             type: Date,
             required: true,
@@ -142,7 +145,7 @@ const gameSchema = new Schema(
 export interface GameDocument extends Document {
     id: string;
     status: "WAITING" | "ACTIVE" | "COMPLETED";
-
+    hostPlayerId: string | null;
     createdAt: Date;
     startedAt: Date | null;
     completedAt: Date | null;
