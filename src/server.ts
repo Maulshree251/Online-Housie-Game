@@ -4,7 +4,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
-
+import { GameScheduler } from "./game/gameScheduler";
 import { GameManager } from "./game/gameManager";
 import { Ticket } from "./models/ticket";
 import { WinnerType } from "./models/game";
@@ -21,7 +21,7 @@ const io = new Server(httpServer, {
 const gameRepository = new GameRepository();
 
 const gameManager = new GameManager(gameRepository);
-
+const gameScheduler = new GameScheduler(gameManager);
 
 async function saveGameState(gameId: string): Promise<void> {
   await gameManager.saveGame(gameId);
@@ -125,15 +125,15 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("game:create", async () => {
     try {
-      const gameEngine = gameManager.createGame();
-      const game = gameEngine.getGame();
+      const gameEngine = await gameManager.createGame();
 
-      await gameManager.saveGame(game.id);
+      const gameId = gameEngine.getGame().id;
+
       socket.emit("game:created", {
-        gameId: game.id,
+        gameId,
       });
 
-      console.log(`New game created: ${game.id}`);
+      console.log(`New game created: ${gameId}`);
     } catch (error) {
       sendError(socket, error);
     }
@@ -412,6 +412,8 @@ async function startServer(): Promise<void> {
 
   await gameManager.recoverGames();
 
+  gameScheduler.start();
+
   httpServer.listen(PORT, () => {
     console.log(
       `Server running at http://localhost:${PORT}`
@@ -422,4 +424,15 @@ async function startServer(): Promise<void> {
 startServer().catch((error) => {
   console.error("Failed to start server:", error);
   process.exit(1);
+});
+
+process.on("SIGINT", () => {
+  console.log("Shutting down server...");
+
+  gameScheduler.stop();
+
+  httpServer.close(() => {
+    console.log("Server stopped.");
+    process.exit(0);
+  });
 });

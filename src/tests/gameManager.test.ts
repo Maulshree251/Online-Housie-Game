@@ -3,10 +3,10 @@ import { GameRepository } from "../repositories/gameRepository";
 import assert from "assert";
 import { GameManager } from "../game/gameManager";
 
-function testCreateGame(): void {
+async function testCreateGame(): Promise<void> {
     const manager = new GameManager();
 
-    const game = manager.createGame();
+    const game = await manager.createGame();
     const gameId = game.getGame().id;
 
     assert.ok(gameId);
@@ -15,10 +15,10 @@ function testCreateGame(): void {
     console.log("✅ Create game test passed");
 }
 
-function testGetGame(): void {
+async function testGetGame(): Promise<void> {
     const manager = new GameManager();
 
-    const createdGame = manager.createGame();
+    const createdGame = await manager.createGame();
     const gameId = createdGame.getGame().id;
 
     const retrievedGame = manager.getGame(gameId);
@@ -31,11 +31,11 @@ function testGetGame(): void {
     console.log("✅ Get game test passed");
 }
 
-function testMultipleGames(): void {
+async function testMultipleGames(): Promise<void> {
     const manager = new GameManager();
 
-    const game1 = manager.createGame();
-    const game2 = manager.createGame();
+    const game1 = await manager.createGame();
+    const game2 = await manager.createGame();
 
     const game1Id = game1.getGame().id;
     const game2Id = game2.getGame().id;
@@ -46,10 +46,10 @@ function testMultipleGames(): void {
     console.log("✅ Multiple games test passed");
 }
 
-function testRemoveGame(): void {
+async function testRemoveGame(): Promise<void> {
     const manager = new GameManager();
 
-    const game = manager.createGame();
+    const game = await manager.createGame();
     const gameId = game.getGame().id;
 
     const removed = manager.removeGame(gameId);
@@ -73,13 +73,13 @@ function testGameNotFound(): void {
     console.log("✅ Game not found test passed");
 }
 
-function runTests(): void {
+async function runTests(): Promise<void> {
     console.log("\n===== GAME MANAGER TESTS =====\n");
 
-    testCreateGame();
-    testGetGame();
-    testMultipleGames();
-    testRemoveGame();
+    await testCreateGame();
+    await testGetGame();
+    await testMultipleGames();
+    await testRemoveGame();
     testGameNotFound();
 
     console.log("\n🎉 All Game Manager tests passed!\n");

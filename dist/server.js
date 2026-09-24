@@ -9,6 +9,7 @@ require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const http_1 = require("http");
 const socket_io_1 = require("socket.io");
+const gameScheduler_1 = require("./game/gameScheduler");
 const gameManager_1 = require("./game/gameManager");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
@@ -19,6 +20,7 @@ const io = new socket_io_1.Server(httpServer, {
 });
 const gameRepository = new gameRepository_1.GameRepository();
 const gameManager = new gameManager_1.GameManager(gameRepository);
+const gameScheduler = new gameScheduler_1.GameScheduler(gameManager);
 async function saveGameState(gameId) {
     await gameManager.saveGame(gameId);
     console.log(`Game ${gameId} saved to MongoDB.`);
@@ -80,13 +82,12 @@ io.on("connection", (socket) => {
     // ------------------------------------------------
     socket.on("game:create", async () => {
         try {
-            const gameEngine = gameManager.createGame();
-            const game = gameEngine.getGame();
-            await gameManager.saveGame(game.id);
+            const gameEngine = await gameManager.createGame();
+            const gameId = gameEngine.getGame().id;
             socket.emit("game:created", {
-                gameId: game.id,
+                gameId,
             });
-            console.log(`New game created: ${game.id}`);
+            console.log(`New game created: ${gameId}`);
         }
         catch (error) {
             sendError(socket, error);
@@ -272,6 +273,7 @@ io.on("connection", (socket) => {
 async function startServer() {
     await (0, connection_1.connectDatabase)();
     await gameManager.recoverGames();
+    gameScheduler.start();
     httpServer.listen(PORT, () => {
         console.log(`Server running at http://localhost:${PORT}`);
     });
@@ -279,4 +281,12 @@ async function startServer() {
 startServer().catch((error) => {
     console.error("Failed to start server:", error);
     process.exit(1);
+});
+process.on("SIGINT", () => {
+    console.log("Shutting down server...");
+    gameScheduler.stop();
+    httpServer.close(() => {
+        console.log("Server stopped.");
+        process.exit(0);
+    });
 });

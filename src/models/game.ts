@@ -45,3 +45,23 @@ export interface Game {
   winners: Winner[];
 
 }
+
+export interface SchedulerConfig {
+  dayOfWeek: number;
+  hour: number;
+  minute: number;
+
+  registrationDurationMinutes: number;
+
+  autoCreateNextGame: boolean;
+}
+
+const schedulerConfig: SchedulerConfig = {
+  dayOfWeek: 6, // Saturday
+  hour: 22,
+  minute: 0,
+
+  registrationDurationMinutes: 60,
+
+  autoCreateNextGame: true,
+};

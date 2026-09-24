@@ -12,13 +12,16 @@ export class GameManager {
   }
 
 
-  public createGame(): GameEngine {
-    console.log("⚠️ createGame() called");
+  public async createGame(): Promise<GameEngine> {
     const gameEngine = new GameEngine();
 
     const gameId = gameEngine.getGame().id;
 
     this.games.set(gameId, gameEngine);
+
+    await this.gameRepository.create(
+      gameEngine.getGame()
+    );
 
     return gameEngine;
   }
