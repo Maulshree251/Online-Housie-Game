@@ -106,10 +106,36 @@ const gameSchema = new Schema(
                 required: true,
             },
 
-            durationInMinutes: {
+            minPlayers: {
                 type: Number,
                 required: true,
             },
+
+            numbersPerRound: {
+                type: Number,
+                required: true,
+            },
+
+            announcementIntervalInSeconds: {
+                type: Number,
+                required: true,
+            },
+        },
+        currentRound: {
+            type: Number,
+            required: true,
+            default: 0,
+        },
+
+        roundStartedAt: {
+            type: Date,
+            default: null,
+        },
+
+        numbersAnnouncedThisRound: {
+            type: Number,
+            required: true,
+            default: 0,
         },
 
         announcedNumbers: {
@@ -152,9 +178,13 @@ export interface GameDocument extends Document {
 
     config: {
         maxPlayers: number;
-        durationInMinutes: number;
+        minPlayers: number;
+        numbersPerRound: number;
+        announcementIntervalInSeconds: number;
     };
-
+    currentRound: number;
+    roundStartedAt: Date | null;
+    numbersAnnouncedThisRound: number;
     announcedNumbers: number[];
     remainingNumbers: number[];
 

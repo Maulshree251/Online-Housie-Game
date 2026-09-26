@@ -11,6 +11,8 @@ const http_1 = require("http");
 const socket_io_1 = require("socket.io");
 const gameScheduler_1 = require("./game/gameScheduler");
 const gameManager_1 = require("./game/gameManager");
+const gameSchedule_1 = require("./config/gameSchedule");
+const announcementEngine_1 = require("./game/announcementEngine");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(httpServer, {
@@ -20,7 +22,14 @@ const io = new socket_io_1.Server(httpServer, {
 });
 const gameRepository = new gameRepository_1.GameRepository();
 const gameManager = new gameManager_1.GameManager(gameRepository);
-const gameScheduler = new gameScheduler_1.GameScheduler(gameManager);
+const announcementEngine = new announcementEngine_1.AnnouncementEngine(gameManager, (gameId, number) => {
+    const gameEngine = gameManager.getGame(gameId);
+    io.to(getGameRoom(gameId)).emit("game:numberAnnounced", {
+        number,
+        state: getSafeGameState(gameId),
+    });
+});
+const gameScheduler = new gameScheduler_1.GameScheduler(gameManager, announcementEngine, gameSchedule_1.gameSchedule);
 async function saveGameState(gameId) {
     await gameManager.saveGame(gameId);
     console.log(`Game ${gameId} saved to MongoDB.`);
@@ -159,28 +168,23 @@ io.on("connection", (socket) => {
     // ------------------------------------------------
     // ANNOUNCE NEXT NUMBER
     // ------------------------------------------------
-    socket.on("game:announce", async ({ gameId }) => {
-        try {
-            requireHost(socket, gameId);
-            const gameEngine = gameManager.getGame(gameId);
-            if (gameEngine.expireGameIfNeeded()) {
-                await saveGameState(gameId);
-                throw new Error("Game duration has ended.");
-            }
-            const number = gameEngine.announceNextNumber();
-            await saveGameState(gameId);
-            const room = getGameRoom(gameId);
-            io.to(room).emit("game:numberAnnounced", {
-                gameId,
-                number,
-            });
-            io.to(room).emit("game:state", getSafeGameState(gameId));
-            console.log(`Number ${number} announced in game ${gameId}`);
-        }
-        catch (error) {
-            sendError(socket, error);
-        }
-    });
+    // socket.on("game:announce", async ({ gameId }: { gameId: string }) => {
+    //   try {
+    //     requireHost(socket, gameId);
+    //     const gameEngine = gameManager.getGame(gameId);
+    //     const number = gameEngine.announceNextNumber();
+    //     await saveGameState(gameId);
+    //     const room = getGameRoom(gameId);
+    //     io.to(room).emit("game:numberAnnounced", {
+    //       gameId,
+    //       number,
+    //     });
+    //     io.to(room).emit("game:state", getSafeGameState(gameId));
+    //     console.log(`Number ${number} announced in game ${gameId}`);
+    //   } catch (error) {
+    //     sendError(socket, error);
+    //   }
+    // });
     // ------------------------------------------------
     // GET GAME STATE
     // ------------------------------------------------
@@ -202,10 +206,6 @@ io.on("connection", (socket) => {
                 throw new Error("You are not connected to this game.");
             }
             const gameEngine = gameManager.getGame(gameId);
-            if (gameEngine.expireGameIfNeeded()) {
-                await saveGameState(gameId);
-                throw new Error("Game duration has ended.");
-            }
             gameEngine.markNumber(connectedPlayer.playerId, number);
             await saveGameState(gameId);
             socket.emit("game:numberMarked", {
@@ -228,10 +228,6 @@ io.on("connection", (socket) => {
                 throw new Error("You are not connected to this game.");
             }
             const gameEngine = gameManager.getGame(gameId);
-            if (gameEngine.expireGameIfNeeded()) {
-                await saveGameState(gameId);
-                throw new Error("Game duration has ended.");
-            }
             const isWinner = gameEngine.claimWinner(connectedPlayer.playerId, winnerType);
             const room = getGameRoom(gameId);
             if (!isWinner) {

@@ -17,9 +17,13 @@ async function createTestGame() {
 
         config: {
             maxPlayers: 10,
-            durationInMinutes: 60,
+            minPlayers: 2,
+            numbersPerRound: 10,
+            announcementIntervalInSeconds: 60,
         },
-
+        currentRound: 0,
+        roundStartedAt: null,
+        numbersAnnouncedThisRound: 0,
         announcedNumbers: [],
 
         remainingNumbers: Array.from(

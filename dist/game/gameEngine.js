@@ -10,14 +10,6 @@ class GameEngine {
     }
     createGame() {
         const numbers = Array.from({ length: 90 }, (_, index) => index + 1);
-        // Shuffle numbers using Fisher-Yates algorithm
-        for (let i = numbers.length - 1; i > 0; i--) {
-            const randomIndex = Math.floor(Math.random() * (i + 1));
-            [numbers[i], numbers[randomIndex]] = [
-                numbers[randomIndex],
-                numbers[i],
-            ];
-        }
         return {
             id: (0, crypto_1.randomUUID)(),
             status: "WAITING",
@@ -27,10 +19,15 @@ class GameEngine {
             completedAt: null,
             config: {
                 maxPlayers: 20,
-                durationInMinutes: 120,
+                minPlayers: 2,
+                numbersPerRound: 10,
+                announcementIntervalInSeconds: 60,
             },
+            currentRound: 0,
+            roundStartedAt: null,
+            numbersAnnouncedThisRound: 0,
             announcedNumbers: [],
-            remainingNumbers: numbers,
+            remainingNumbers: this.shuffle(numbers),
             playerTickets: [],
             winners: [],
         };
@@ -70,13 +67,17 @@ class GameEngine {
     }
     startGame() {
         if (this.game.status !== "WAITING") {
-            throw new Error("Game cannot be started.");
+            throw new Error("Game has already started.");
         }
-        if (this.game.playerTickets.length === 0) {
-            throw new Error("At least one player is required to start the game.");
+        if (this.game.playerTickets.length <
+            this.game.config.minPlayers) {
+            throw new Error(`Minimum ${this.game.config.minPlayers} players are required to start the game.`);
         }
         this.game.status = "ACTIVE";
         this.game.startedAt = new Date();
+        this.game.currentRound = 1;
+        this.game.roundStartedAt = new Date();
+        this.game.numbersAnnouncedThisRound = 0;
     }
     addPlayerTicket(playerId, ticket) {
         if (this.game.status !== "WAITING") {
@@ -121,20 +122,6 @@ class GameEngine {
         this.game.remainingNumbers.splice(numberIndex, 1);
         this.game.announcedNumbers.push(number);
     }
-    announceNextNumber() {
-        if (this.game.status !== "ACTIVE") {
-            throw new Error("Game is not active.");
-        }
-        if (this.game.remainingNumbers.length === 0) {
-            throw new Error("All numbers have already been announced.");
-        }
-        const nextNumber = this.game.remainingNumbers[this.game.remainingNumbers.length - 1];
-        if (nextNumber === undefined) {
-            throw new Error("Unable to announce the next number.");
-        }
-        this.announceNumber(nextNumber);
-        return nextNumber;
-    }
     markNumber(playerId, number) {
         if (this.game.status !== "ACTIVE") {
             throw new Error("Game is not active.");
@@ -149,6 +136,9 @@ class GameEngine {
         const numberExistsOnTicket = playerTicket.ticket.some((row) => row.includes(number));
         if (!numberExistsOnTicket) {
             throw new Error("This number does not exist on the ticket.");
+        }
+        if (!this.game.announcedNumbers.includes(number)) {
+            throw new Error("Number has not been announced.");
         }
         playerTicket.markedNumbers.add(number);
     }
@@ -224,30 +214,64 @@ class GameEngine {
     }
     completeGame() {
         if (this.game.status !== "ACTIVE") {
-            throw new Error("Only an active game can be completed.");
+            throw new Error("Game is not active.");
         }
         this.game.status = "COMPLETED";
         this.game.completedAt = new Date();
     }
-    isGameExpired() {
-        if (this.game.status !== "ACTIVE" ||
-            !this.game.startedAt) {
-            return false;
-        }
-        const currentTime = Date.now();
-        const startTime = this.game.startedAt.getTime();
-        const durationInMilliseconds = this.game.config.durationInMinutes * 60 * 1000;
-        return currentTime - startTime >= durationInMilliseconds;
-    }
-    expireGameIfNeeded() {
-        if (!this.isGameExpired()) {
-            return false;
-        }
-        this.completeGame();
-        return true;
-    }
+    // public isGameExpired(): boolean {
+    //   if (
+    //     this.game.status !== "ACTIVE" ||
+    //     !this.game.startedAt
+    //   ) {
+    //     return false;
+    //   }
+    //   const currentTime = Date.now();
+    //   const startTime = this.game.startedAt.getTime();
+    //   const durationInMilliseconds =
+    //     this.game.config.durationInMinutes * 60 * 1000;
+    //   return currentTime - startTime >= durationInMilliseconds;
+    // }
+    // public expireGameIfNeeded(): boolean {
+    //   if (!this.isGameExpired()) {
+    //     return false;
+    //   }
+    //   this.completeGame();
+    //   return true;
+    // }
     static fromGame(game) {
         return new GameEngine(game);
+    }
+    announceNextNumber() {
+        if (this.game.status !== "ACTIVE") {
+            throw new Error("Game is not active.");
+        }
+        if (this.game.numbersAnnouncedThisRound >=
+            this.game.config.numbersPerRound) {
+            throw new Error("Maximum number of announcements for this round has been reached.");
+        }
+        if (this.game.remainingNumbers.length === 0) {
+            throw new Error("No numbers remaining.");
+        }
+        const number = this.game.remainingNumbers[this.game.remainingNumbers.length - 1];
+        this.announceNumber(number);
+        this.game.numbersAnnouncedThisRound++;
+        return number;
+    }
+    isRoundComplete() {
+        return (this.game.numbersAnnouncedThisRound >=
+            this.game.config.numbersPerRound);
+    }
+    startNextRound() {
+        if (this.game.status !== "ACTIVE") {
+            throw new Error("Game is not active.");
+        }
+        if (!this.isRoundComplete()) {
+            throw new Error("Current round has not completed yet.");
+        }
+        this.game.currentRound++;
+        this.game.roundStartedAt = new Date();
+        this.game.numbersAnnouncedThisRound = 0;
     }
 }
 exports.GameEngine = GameEngine;

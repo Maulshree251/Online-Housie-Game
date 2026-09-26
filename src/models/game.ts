@@ -24,12 +24,16 @@ export interface Winner {
 
 export interface GameConfig {
   maxPlayers: number;
-  durationInMinutes: number;
+  minPlayers: number;
+  // durationInMinutes: number;
+  numbersPerRound: number;
+  announcementIntervalInSeconds: number;
 }
 
 export interface Game {
   id: string;
   status: GameStatus;
+
   hostPlayerId: string | null;
 
   createdAt: Date;
@@ -38,12 +42,20 @@ export interface Game {
 
   config: GameConfig;
 
+  // Weekly round state
+  currentRound: number;
+  roundStartedAt: Date | null;
+  numbersAnnouncedThisRound: number;
+
+  // Number pool
   announcedNumbers: number[];
   remainingNumbers: number[];
 
+  // Players
   playerTickets: PlayerTicket[];
-  winners: Winner[];
 
+  // Winners
+  winners: Winner[];
 }
 
 export interface SchedulerConfig {

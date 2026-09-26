@@ -12,16 +12,25 @@ export class GameManager {
   }
 
 
-  public async createGame(): Promise<GameEngine> {
+  public async createGame(
+    maxPlayers: number = 20,
+    minPlayers: number = 2,
+    numbersPerRound: number = 10,
+    announcementIntervalInSeconds: number = 60
+  ): Promise<GameEngine> {
     const gameEngine = new GameEngine();
 
-    const gameId = gameEngine.getGame().id;
+    const game = gameEngine.getGame();
 
-    this.games.set(gameId, gameEngine);
+    game.config.maxPlayers = maxPlayers;
+    game.config.minPlayers = minPlayers;
+    game.config.numbersPerRound = numbersPerRound;
+    game.config.announcementIntervalInSeconds =
+      announcementIntervalInSeconds;
 
-    await this.gameRepository.create(
-      gameEngine.getGame()
-    );
+    this.games.set(game.id, gameEngine);
+
+    await this.gameRepository.create(game);
 
     return gameEngine;
   }
@@ -78,25 +87,10 @@ export class GameManager {
 
 
   public async recoverGames(): Promise<void> {
-    const games =
-      await this.gameRepository.findRecoverableGames();
+    const games = await this.gameRepository.findRecoverableGames();
 
     for (const game of games) {
       const gameEngine = GameEngine.fromGame(game);
-
-      if (gameEngine.isGameExpired()) {
-        gameEngine.expireGameIfNeeded();
-
-        await this.gameRepository.save(
-          gameEngine.getGame()
-        );
-
-        console.log(
-          `Game ${game.id} expired during recovery.`
-        );
-
-        continue;
-      }
 
       this.games.set(game.id, gameEngine);
 

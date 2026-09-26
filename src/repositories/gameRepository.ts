@@ -16,8 +16,17 @@ function gameToDatabase(game: Game) {
         startedAt: game.startedAt,
         completedAt: game.completedAt,
 
-        config: game.config,
-
+        config: {
+            maxPlayers: game.config.maxPlayers,
+            minPlayers: game.config.minPlayers,
+            numbersPerRound: game.config.numbersPerRound,
+            announcementIntervalInSeconds:
+                game.config.announcementIntervalInSeconds,
+        },
+        currentRound: game.currentRound,
+        roundStartedAt: game.roundStartedAt,
+        numbersAnnouncedThisRound:
+            game.numbersAnnouncedThisRound,
         announcedNumbers: game.announcedNumbers,
         remainingNumbers: game.remainingNumbers,
 
@@ -49,9 +58,18 @@ function databaseToGame(document: any): Game {
 
         config: {
             maxPlayers: document.config.maxPlayers,
-            durationInMinutes: document.config.durationInMinutes,
+            minPlayers: document.config.minPlayers,
+            numbersPerRound: document.config.numbersPerRound,
+            announcementIntervalInSeconds:
+                document.config.announcementIntervalInSeconds,
         },
+        currentRound: document.currentRound,
+        roundStartedAt: document.roundStartedAt
+            ? new Date(document.roundStartedAt)
+            : null,
 
+        numbersAnnouncedThisRound:
+            document.numbersAnnouncedThisRound,
         announcedNumbers: [...document.announcedNumbers],
         remainingNumbers: [...document.remainingNumbers],
 

@@ -8,6 +8,8 @@ import { GameScheduler } from "./game/gameScheduler";
 import { GameManager } from "./game/gameManager";
 import { Ticket } from "./models/ticket";
 import { WinnerType } from "./models/game";
+import { gameSchedule } from "./config/gameSchedule";
+import { AnnouncementEngine } from "./game/announcementEngine";
 
 const app = express();
 const httpServer = createServer(app);
@@ -19,10 +21,27 @@ const io = new Server(httpServer, {
 });
 
 const gameRepository = new GameRepository();
-
 const gameManager = new GameManager(gameRepository);
-const gameScheduler = new GameScheduler(gameManager);
+const announcementEngine = new AnnouncementEngine(
+  gameManager,
+  (gameId, number) => {
+    const gameEngine = gameManager.getGame(gameId);
 
+    io.to(getGameRoom(gameId)).emit(
+      "game:numberAnnounced",
+      {
+        number,
+        state: getSafeGameState(gameId),
+      }
+    );
+  }
+);
+const gameScheduler =
+  new GameScheduler(
+    gameManager,
+    announcementEngine,
+    gameSchedule
+  );
 async function saveGameState(gameId: string): Promise<void> {
   await gameManager.saveGame(gameId);
 
@@ -240,32 +259,27 @@ io.on("connection", (socket: Socket) => {
   // ANNOUNCE NEXT NUMBER
   // ------------------------------------------------
 
-  socket.on("game:announce", async ({ gameId }: { gameId: string }) => {
-    try {
-      requireHost(socket, gameId);
+  // socket.on("game:announce", async ({ gameId }: { gameId: string }) => {
+  //   try {
+  //     requireHost(socket, gameId);
 
-      const gameEngine = gameManager.getGame(gameId);
-      if (gameEngine.expireGameIfNeeded()) {
-        await saveGameState(gameId);
+  //     const gameEngine = gameManager.getGame(gameId);
+  //     const number = gameEngine.announceNextNumber();
+  //     await saveGameState(gameId);
+  //     const room = getGameRoom(gameId);
 
-        throw new Error("Game duration has ended.");
-      }
-      const number = gameEngine.announceNextNumber();
-      await saveGameState(gameId);
-      const room = getGameRoom(gameId);
+  //     io.to(room).emit("game:numberAnnounced", {
+  //       gameId,
+  //       number,
+  //     });
 
-      io.to(room).emit("game:numberAnnounced", {
-        gameId,
-        number,
-      });
+  //     io.to(room).emit("game:state", getSafeGameState(gameId));
 
-      io.to(room).emit("game:state", getSafeGameState(gameId));
-
-      console.log(`Number ${number} announced in game ${gameId}`);
-    } catch (error) {
-      sendError(socket, error);
-    }
-  });
+  //     console.log(`Number ${number} announced in game ${gameId}`);
+  //   } catch (error) {
+  //     sendError(socket, error);
+  //   }
+  // });
 
 
   // ------------------------------------------------
@@ -302,11 +316,6 @@ io.on("connection", (socket: Socket) => {
         }
 
         const gameEngine = gameManager.getGame(gameId);
-        if (gameEngine.expireGameIfNeeded()) {
-          await saveGameState(gameId);
-
-          throw new Error("Game duration has ended.");
-        }
         gameEngine.markNumber(connectedPlayer.playerId, number);
         await saveGameState(gameId);
         socket.emit("game:numberMarked", {
@@ -342,11 +351,6 @@ io.on("connection", (socket: Socket) => {
         }
 
         const gameEngine = gameManager.getGame(gameId);
-        if (gameEngine.expireGameIfNeeded()) {
-          await saveGameState(gameId);
-
-          throw new Error("Game duration has ended.");
-        }
         const isWinner = gameEngine.claimWinner(
           connectedPlayer.playerId,
           winnerType
