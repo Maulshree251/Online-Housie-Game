@@ -148,6 +148,20 @@ class GameEngine {
         if (this.game.status !== "ACTIVE") {
             throw new Error("Game is not active.");
         }
+        // Full House can only be claimed after
+        // all other winning categories have been claimed.
+        if (winnerType === "FULL_HOUSE") {
+            const requiredCategories = [
+                "FIRST_5",
+                "ONE_LINE",
+                "TWO_LINES",
+                "THREE_LINES",
+            ];
+            const allCategoriesClaimed = requiredCategories.every((category) => this.game.winners.some((winner) => winner.type === category));
+            if (!allCategoriesClaimed) {
+                throw new Error("Full House cannot be claimed until all other winning categories have been claimed.");
+            }
+        }
         // Step 1: Check whether this category is already claimed.
         const categoryAlreadyClaimed = this.game.winners.some((winner) => winner.type === winnerType);
         if (categoryAlreadyClaimed) {

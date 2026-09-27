@@ -19,7 +19,6 @@ export class GameManager {
     announcementIntervalInSeconds: number = 60
   ): Promise<GameEngine> {
     const gameEngine = new GameEngine();
-
     const game = gameEngine.getGame();
 
     game.config.maxPlayers = maxPlayers;
@@ -102,5 +101,74 @@ export class GameManager {
     console.log(
       `Recovered ${this.games.size} active/waiting game(s).`
     );
+  }
+
+  public getWaitingGame(): GameEngine | null {
+    for (const gameEngine of this.games.values()) {
+      if (gameEngine.getGame().status === "WAITING") {
+        return gameEngine;
+      }
+    }
+
+    return null;
+  }
+
+  public getActiveGame(): GameEngine | null {
+    for (const gameEngine of this.games.values()) {
+      if (gameEngine.getGame().status === "ACTIVE") {
+        return gameEngine;
+      }
+    }
+
+    return null;
+  }
+  public async ensureWaitingGame(): Promise<GameEngine | null> {
+    // --------------------------------------------
+    // 1. Check if a WAITING game already exists
+    // --------------------------------------------
+
+    const existingWaitingGame = this.getWaitingGame();
+
+    if (existingWaitingGame) {
+      console.log(
+        `Waiting game already exists: ` +
+        `${existingWaitingGame.getGame().id}`
+      );
+
+      return existingWaitingGame;
+    }
+
+    // --------------------------------------------
+    // 2. Check if an ACTIVE game already exists
+    // --------------------------------------------
+
+    const activeGame = this.getActiveGame();
+
+    if (activeGame) {
+      console.log(
+        `Active game ${activeGame.getGame().id} exists. ` +
+        `No new waiting game created.`
+      );
+
+      return null;
+    }
+
+    // --------------------------------------------
+    // 3. Neither WAITING nor ACTIVE exists
+    //    Create exactly ONE waiting game
+    // --------------------------------------------
+
+    const newGame = await this.createGame(
+      20,
+      2,
+      10,
+      10
+    );
+
+    console.log(
+      `Created new waiting game: ${newGame.getGame().id}`
+    );
+
+    return newGame;
   }
 }

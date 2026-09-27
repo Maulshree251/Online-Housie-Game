@@ -373,7 +373,16 @@ io.on("connection", (socket: Socket) => {
           playerId: connectedPlayer.playerId,
           winnerType,
         });
+        if (
+          winnerType === "FULL_HOUSE" &&
+          gameEngine.getGame().status === "COMPLETED"
+        ) {
+          console.log(
+            `Game ${gameId} completed with Full House.`
+          );
 
+          await gameManager.ensureWaitingGame();
+        }
         io.to(room).emit("game:state", getSafeGameState(gameId));
 
         console.log(
@@ -416,12 +425,12 @@ async function startServer(): Promise<void> {
 
   await gameManager.recoverGames();
 
+  await gameManager.ensureWaitingGame();
+
   gameScheduler.start();
 
   httpServer.listen(PORT, () => {
-    console.log(
-      `Server running at http://localhost:${PORT}`
-    );
+    console.log(`Server running at http://localhost:${PORT}`);
   });
 }
 

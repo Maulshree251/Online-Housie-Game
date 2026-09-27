@@ -244,6 +244,11 @@ io.on("connection", (socket) => {
                 playerId: connectedPlayer.playerId,
                 winnerType,
             });
+            if (winnerType === "FULL_HOUSE" &&
+                gameEngine.getGame().status === "COMPLETED") {
+                console.log(`Game ${gameId} completed with Full House.`);
+                await gameManager.ensureWaitingGame();
+            }
             io.to(room).emit("game:state", getSafeGameState(gameId));
             console.log(`${connectedPlayer.playerId} won ${winnerType} in game ${gameId}`);
         }
@@ -269,6 +274,7 @@ io.on("connection", (socket) => {
 async function startServer() {
     await (0, connection_1.connectDatabase)();
     await gameManager.recoverGames();
+    await gameManager.ensureWaitingGame();
     gameScheduler.start();
     httpServer.listen(PORT, () => {
         console.log(`Server running at http://localhost:${PORT}`);

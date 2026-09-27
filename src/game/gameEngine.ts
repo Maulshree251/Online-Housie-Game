@@ -1,5 +1,3 @@
-
-
 import { randomUUID } from "crypto";
 import {
   Game,
@@ -240,8 +238,33 @@ export class GameEngine {
     playerId: string,
     winnerType: WinnerType
   ): boolean {
+
     if (this.game.status !== "ACTIVE") {
       throw new Error("Game is not active.");
+    }
+
+    // Full House can only be claimed after
+    // all other winning categories have been claimed.
+    if (winnerType === "FULL_HOUSE") {
+      const requiredCategories: WinnerType[] = [
+        "FIRST_5",
+        "ONE_LINE",
+        "TWO_LINES",
+        "THREE_LINES",
+      ];
+
+      const allCategoriesClaimed =
+        requiredCategories.every((category) =>
+          this.game.winners.some(
+            (winner) => winner.type === category
+          )
+        );
+
+      if (!allCategoriesClaimed) {
+        throw new Error(
+          "Full House cannot be claimed until all other winning categories have been claimed."
+        );
+      }
     }
 
     // Step 1: Check whether this category is already claimed.

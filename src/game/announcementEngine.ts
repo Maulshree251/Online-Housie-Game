@@ -8,6 +8,7 @@ export type NumberAnnouncementHandler = (
 export class AnnouncementEngine {
   private gameManager: GameManager;
   private onNumberAnnounced: NumberAnnouncementHandler;
+  private runningGames: Set<string> = new Set();
 
   constructor(
     gameManager: GameManager,
@@ -16,6 +17,11 @@ export class AnnouncementEngine {
     this.gameManager = gameManager;
     this.onNumberAnnounced = onNumberAnnounced;
   }
+
+  public isRunning(gameId: string): boolean {
+    return this.runningGames.has(gameId);
+  }
+
 
   public async runWeeklyRound(gameId: string): Promise<void> {
     if (this.runningGames.has(gameId)) {
@@ -31,6 +37,7 @@ export class AnnouncementEngine {
     try {
       const gameEngine = this.gameManager.getGame(gameId);
       const game = gameEngine.getGame();
+
 
       if (game.status !== "ACTIVE") {
         console.log(
@@ -48,9 +55,20 @@ export class AnnouncementEngine {
         !gameEngine.isRoundComplete() &&
         gameEngine.getGame().status === "ACTIVE"
       ) {
+        const announcementStart = Date.now();
         const number = gameEngine.announceNextNumber();
-
+        const saveStart = Date.now();
         await this.gameManager.saveGame(gameId);
+        const saveEnd = Date.now();
+
+
+        console.log(
+          `Game ${gameId}: announced ${number} ` +
+          `(${gameEngine.getGame().numbersAnnouncedThisRound}/` +
+          `${game.config.numbersPerRound})`
+        );
+
+        this.onNumberAnnounced(gameId, number);
 
         console.log(
           `Game ${gameId}: announced ${number} ` +
@@ -67,11 +85,17 @@ export class AnnouncementEngine {
         await this.wait(
           game.config.announcementIntervalInSeconds * 1000
         );
+
+        console.log(
+          `Game ${gameId}: total announcement cycle took ` +
+          `${Date.now() - announcementStart} ms`
+        );
       }
 
       console.log(
         `Round ${game.currentRound} completed for game ${gameId}.`
       );
+
 
     } finally {
       this.runningGames.delete(gameId);
@@ -84,5 +108,5 @@ export class AnnouncementEngine {
     });
   }
 
-  private runningGames: Set<string> = new Set();
+
 }

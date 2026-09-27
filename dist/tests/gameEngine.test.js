@@ -82,6 +82,7 @@ function testPlayerCannotJoinAfterStart() {
     const engine = new gameEngine_1.GameEngine();
     // Add a player before starting the game.
     engine.addPlayerTicket("player-1", createTestTicket());
+    engine.addPlayerTicket("player-2", createTestTicket());
     // Start the game successfully.
     engine.startGame();
     // Try to join after the game has started.
@@ -140,12 +141,13 @@ function testCannotStartEmptyGame() {
     const engine = new gameEngine_1.GameEngine();
     assert_1.default.throws(() => {
         engine.startGame();
-    }, /At least one player is required/);
+    }, /Minimum 2 players are required/);
     console.log("✅ Cannot start empty game test passed");
 }
 function testGameStoresStartTime() {
     const engine = new gameEngine_1.GameEngine();
     engine.addPlayerTicket("player1", createTestTicket());
+    engine.addPlayerTicket("player2", createTestTicket());
     engine.startGame();
     assert_1.default.strictEqual(engine.getGame().status, "ACTIVE");
     assert_1.default.ok(engine.getGame().startedAt instanceof Date);

@@ -1,5 +1,4 @@
 import { GameManager } from "./gameManager";
-import { GameEngine } from "./gameEngine";
 import { AnnouncementEngine } from "./announcementEngine";
 import {
     GameScheduleConfig,
@@ -11,8 +10,10 @@ export class GameScheduler {
     private config: GameScheduleConfig;
 
     private interval: NodeJS.Timeout | null = null;
-
     private lastScheduleKey: string | null = null;
+
+    // Tracks the currently executing scheduled task.
+    private currentExecution: Promise<void> | null = null;
 
     constructor(
         gameManager: GameManager,
@@ -29,15 +30,16 @@ export class GameScheduler {
             return;
         }
 
-        console.log("Game scheduler started.");
+        this.currentExecution = this.checkSchedule();
 
-        void this.checkSchedule();
+        void this.currentExecution.finally(() => {
+            this.currentExecution = null;
+        });
 
         this.interval = setInterval(() => {
-            void this.checkSchedule();
+            void this.runScheduleCheck();
         }, 1000);
     }
-
     public stop(): void {
         if (!this.interval) {
             return;
@@ -46,9 +48,22 @@ export class GameScheduler {
         clearInterval(this.interval);
         this.interval = null;
 
-        console.log("Game scheduler stopped.");
     }
 
+    /**
+     * Waits for the currently running scheduled operation.
+     *
+     * Useful for integration tests and graceful shutdown.
+     */
+    public async waitForCurrentExecution(): Promise<void> {
+        const execution = this.currentExecution;
+
+        if (!execution) {
+            return;
+        }
+
+        await execution;
+    }
     private async checkSchedule(): Promise<void> {
         try {
             const now = new Date();
@@ -81,24 +96,20 @@ export class GameScheduler {
         }
     }
 
-    private async startWeeklyRound(): Promise<void> {
-        const games = this.gameManager.getAllGames();
 
-        /*
-         * First look for an ACTIVE game.
-         *
-         * If one exists, this means the previous game
-         * was not completed with Full House.
-         */
-        const activeGame = games.find(
-            game => game.getGame().status === "ACTIVE"
-        );
+    private async startWeeklyRound(): Promise<void> {
+
+        // --------------------------------------------
+        // 1. Check whether a game is already ACTIVE
+        // --------------------------------------------
+        const activeGame = this.gameManager.getActiveGame();
 
         if (activeGame) {
             const game = activeGame.getGame();
 
             console.log(
-                `Continuing game ${game.id}, Round ${game.currentRound + 1}.`
+                `Continuing game ${game.id}, ` +
+                `starting Round ${game.currentRound + 1}.`
             );
 
             if (activeGame.isRoundComplete()) {
@@ -107,17 +118,20 @@ export class GameScheduler {
                 await this.gameManager.saveGame(game.id);
             }
 
-            void this.announcementEngine.runWeeklyRound(game.id);
-
+            // IMPORTANT:
+            // Wait for the complete announcement round.
+            await this.announcementEngine.runWeeklyRound(
+                game.id
+            );
             return;
         }
 
-        /*
-         * No active game means we need a new game.
-         */
-        const waitingGame = games.find(
-            game => game.getGame().status === "WAITING"
-        );
+        // --------------------------------------------
+        // 2. No ACTIVE game
+        //    Find the WAITING registration game
+        // --------------------------------------------
+
+        const waitingGame = this.gameManager.getWaitingGame();
 
         if (!waitingGame) {
             console.log(
@@ -128,6 +142,10 @@ export class GameScheduler {
         }
 
         const game = waitingGame.getGame();
+
+        // --------------------------------------------
+        // 3. Check minimum players
+        // --------------------------------------------
 
         if (
             game.playerTickets.length <
@@ -142,6 +160,10 @@ export class GameScheduler {
             return;
         }
 
+        // --------------------------------------------
+        // 4. Start the waiting game
+        // --------------------------------------------
+
         waitingGame.startGame();
 
         await this.gameManager.saveGame(game.id);
@@ -150,6 +172,49 @@ export class GameScheduler {
             `Game ${game.id} started. Round 1 begins.`
         );
 
-        void this.announcementEngine.runWeeklyRound(game.id);
+        // --------------------------------------------
+        // 5. Start automatic announcements
+        // --------------------------------------------
+
+        // IMPORTANT:
+        // Await the entire 10-number round.
+
+        console.log(
+            "SCHEDULER interval =",
+            waitingGame.getGame().config.announcementIntervalInSeconds
+        );
+
+
+        await this.announcementEngine.runWeeklyRound(
+            game.id
+        );
+
+
     }
+    private async runScheduleCheck(): Promise<void> {
+        if (this.currentExecution) {
+            return;
+        }
+
+        const execution = this.checkSchedule();
+
+        this.currentExecution = execution;
+
+        try {
+            await execution;
+
+        } finally {
+
+            if (this.currentExecution === execution) {
+                this.currentExecution = null;
+            }
+        }
+    }
+
+    public async runScheduledGameNow(): Promise<void> {
+        await this.startWeeklyRound();
+    }
+
+
+
 }

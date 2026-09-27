@@ -157,6 +157,10 @@ function testPlayerCannotJoinAfterStart(): void {
     "player-1",
     createTestTicket()
   );
+  engine.addPlayerTicket(
+    "player-2",
+    createTestTicket()
+  );
 
   // Start the game successfully.
   engine.startGame();
@@ -283,7 +287,7 @@ function testCannotStartEmptyGame(): void {
 
   assert.throws(() => {
     engine.startGame();
-  }, /At least one player is required/);
+  }, /Minimum 2 players are required/);
 
   console.log("✅ Cannot start empty game test passed");
 }
@@ -296,7 +300,10 @@ function testGameStoresStartTime(): void {
     "player1",
     createTestTicket()
   );
-
+  engine.addPlayerTicket(
+    "player2",
+    createTestTicket()
+  );
   engine.startGame();
 
   assert.strictEqual(
