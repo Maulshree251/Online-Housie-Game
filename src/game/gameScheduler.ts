@@ -11,18 +11,19 @@ export class GameScheduler {
 
     private interval: NodeJS.Timeout | null = null;
     private lastScheduleKey: string | null = null;
-
-    // Tracks the currently executing scheduled task.
     private currentExecution: Promise<void> | null = null;
 
+    private nowProvider: () => Date;
     constructor(
         gameManager: GameManager,
         announcementEngine: AnnouncementEngine,
-        config: GameScheduleConfig
+        config: GameScheduleConfig,
+        nowProvider: () => Date = () => new Date()
     ) {
         this.gameManager = gameManager;
         this.announcementEngine = announcementEngine;
         this.config = config;
+        this.nowProvider = nowProvider;
     }
 
     public start(): void {
@@ -66,7 +67,7 @@ export class GameScheduler {
     }
     private async checkSchedule(): Promise<void> {
         try {
-            const now = new Date();
+            const now = this.nowProvider();
 
             const day = now.getDay();
             const hour = now.getHours();

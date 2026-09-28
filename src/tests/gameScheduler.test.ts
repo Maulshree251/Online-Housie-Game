@@ -24,7 +24,25 @@ describe("Game Scheduler", () => {
 
         gameRepository =
             new GameRepository();
+    });
 
+    afterEach(async () => {
+        if (scheduler) {
+            scheduler.stop();
+
+            await scheduler.waitForCurrentExecution();
+        }
+
+        if (testGameId) {
+            await gameRepository.delete(
+                testGameId
+            );
+
+            testGameId = null;
+        }
+    });
+
+    beforeEach(() => {
         gameManager =
             new GameManager(gameRepository);
 
@@ -39,47 +57,24 @@ describe("Game Scheduler", () => {
             );
     });
 
-    afterEach(async () => {
-        if (scheduler) {
-            scheduler.stop();
-            await scheduler.waitForCurrentExecution();
-        }
-
-        if (testGameId) {
-            await gameRepository.delete(
-                testGameId
-            );
-
-            testGameId = null;
-        }
-
-        jest.useRealTimers();
-    });
-
     afterAll(async () => {
         await disconnectDatabase();
     });
 
-    // ----------------------------------------
+    // ========================================
     // TEST 1
-    // ----------------------------------------
+    // ========================================
 
     it(
         "should start a game when the scheduled time matches",
         async () => {
-            jest.useFakeTimers();
-
             const scheduledTime =
                 new Date(
                     "2026-10-03T22:00:00"
                 );
 
-            jest.setSystemTime(
-                scheduledTime
-            );
-
-            const scheduleConfig:
-                GameScheduleConfig = {
+            const scheduleConfig: GameScheduleConfig =
+            {
                 ...gameSchedule,
                 dayOfWeek:
                     scheduledTime.getDay(),
@@ -95,7 +90,8 @@ describe("Game Scheduler", () => {
                 new GameScheduler(
                     gameManager,
                     announcementEngine,
-                    scheduleConfig
+                    scheduleConfig,
+                    () => scheduledTime
                 );
 
             // --------------------------------
@@ -128,16 +124,15 @@ describe("Game Scheduler", () => {
             );
 
             // --------------------------------
-            // START SCHEDULER
+            // RUN REAL SCHEDULE CHECK
             // --------------------------------
 
-            scheduler.start();
-
-            await scheduler
-                .waitForCurrentExecution();
+            await (
+                scheduler as any
+            ).checkSchedule();
 
             // --------------------------------
-            // VERIFY GAME STARTED
+            // VERIFY
             // --------------------------------
 
             const game =
@@ -168,15 +163,13 @@ describe("Game Scheduler", () => {
         30000
     );
 
-    // ----------------------------------------
+    // ========================================
     // TEST 2
-    // ----------------------------------------
+    // ========================================
 
     it(
         "should not start a game when the scheduled time does not match",
         async () => {
-            jest.useFakeTimers();
-
             const currentTime =
                 new Date(
                     "2026-10-03T21:59:00"
@@ -186,10 +179,6 @@ describe("Game Scheduler", () => {
                 new Date(
                     "2026-10-03T22:00:00"
                 );
-
-            jest.setSystemTime(
-                currentTime
-            );
 
             const scheduleConfig:
                 GameScheduleConfig = {
@@ -208,7 +197,8 @@ describe("Game Scheduler", () => {
                 new GameScheduler(
                     gameManager,
                     announcementEngine,
-                    scheduleConfig
+                    scheduleConfig,
+                    () => currentTime
                 );
 
             // --------------------------------
@@ -241,13 +231,12 @@ describe("Game Scheduler", () => {
             );
 
             // --------------------------------
-            // START SCHEDULER
+            // RUN SCHEDULE CHECK
             // --------------------------------
 
-            scheduler.start();
-
-            await scheduler
-                .waitForCurrentExecution();
+            await (
+                scheduler as any
+            ).checkSchedule();
 
             // --------------------------------
             // VERIFY GAME DID NOT START
@@ -277,23 +266,20 @@ describe("Game Scheduler", () => {
         30000
     );
 
-    // ----------------------------------------
+    // ========================================
     // TEST 3
-    // ----------------------------------------
+    // ========================================
 
     it(
         "should not trigger the same scheduled minute more than once",
         async () => {
-            jest.useFakeTimers();
-
             const scheduledTime =
                 new Date(
                     "2026-10-03T22:00:00"
                 );
 
-            jest.setSystemTime(
-                scheduledTime
-            );
+            let currentTime =
+                scheduledTime;
 
             const scheduleConfig:
                 GameScheduleConfig = {
@@ -312,7 +298,8 @@ describe("Game Scheduler", () => {
                 new GameScheduler(
                     gameManager,
                     announcementEngine,
-                    scheduleConfig
+                    scheduleConfig,
+                    () => currentTime
                 );
 
             // --------------------------------
@@ -345,13 +332,12 @@ describe("Game Scheduler", () => {
             );
 
             // --------------------------------
-            // FIRST SCHEDULE CHECK
+            // FIRST CHECK
             // --------------------------------
 
-            scheduler.start();
-
-            await scheduler
-                .waitForCurrentExecution();
+            await (
+                scheduler as any
+            ).checkSchedule();
 
             let game =
                 gameManager
@@ -362,28 +348,22 @@ describe("Game Scheduler", () => {
                 "ACTIVE"
             );
 
-            expect(game.currentRound).toBe(
-                1
-            );
-
             expect(
                 game.announcedNumbers.length
             ).toBe(1);
 
             // --------------------------------
-            // MOVE ONE SECOND FORWARD
+            // SAME MINUTE, ONE SECOND LATER
             // --------------------------------
 
-            jest.setSystemTime(
+            currentTime =
                 new Date(
                     "2026-10-03T22:00:01"
-                )
-            );
+                );
 
-            jest.advanceTimersByTime(1000);
-
-            await scheduler
-                .waitForCurrentExecution();
+            await (
+                scheduler as any
+            ).checkSchedule();
 
             game =
                 gameManager

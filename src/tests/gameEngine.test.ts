@@ -4,7 +4,7 @@ import { GameEngine } from "../game/gameEngine";
 import { Ticket } from "../models/ticket";
 
 
-function createTestTicket(): Ticket {
+export function createTestTicket(): Ticket {
   return [
     [1, 10, 20, 30, 40, null, null, null, null],
     [2, null, 21, null, 41, 50, null, 70, null],
@@ -241,33 +241,33 @@ function testWinnerCategoryCanBeClaimedOnlyOnce(): void {
   );
 }
 
-function testFullHouseCompletesGame(): void {
-  const engine = createEngineWithPlayers();
+// function testFullHouseCompletesGame(): void {
+//   const engine = createEngineWithPlayers();
 
-  const allNumbers = [
-    1, 10, 20, 30, 40,
-    2, 21, 41, 50, 70,
-    3, 31, 51, 60, 80,
-  ];
+//   const allNumbers = [
+//     1, 10, 20, 30, 40,
+//     2, 21, 41, 50, 70,
+//     3, 31, 51, 60, 80,
+//   ];
 
-  announceNumbers(engine, allNumbers);
+//   announceNumbers(engine, allNumbers);
 
-  markNumbers(engine, "player-1", allNumbers);
+//   markNumbers(engine, "player-1", allNumbers);
 
-  const result = engine.claimWinner(
-    "player-1",
-    "FULL_HOUSE"
-  );
+//   const result = engine.claimWinner(
+//     "player-1",
+//     "FULL_HOUSE"
+//   );
 
-  assert.strictEqual(result, true);
+//   assert.strictEqual(result, true);
 
-  assert.strictEqual(
-    engine.getGame().status,
-    "COMPLETED"
-  );
+//   assert.strictEqual(
+//     engine.getGame().status,
+//     "COMPLETED"
+//   );
 
-  console.log("✅ Full House completion test passed");
-}
+//   console.log("✅ Full House completion test passed");
+// }
 
 
 function testGameStartsWithWaitingStatus(): void {
@@ -318,6 +318,154 @@ function testGameStoresStartTime(): void {
   console.log("✅ Game stores start time test passed");
 }
 
+function testAll90NumbersCanBeAnnounced(): void {
+  const engine = createEngineWithPlayers();
+
+  engine.getGame().config.numbersPerRound = 90;
+
+  const announcedNumbers = new Set<number>();
+
+  for (let i = 0; i < 90; i++) {
+    const number = engine.announceNextNumber();
+    announcedNumbers.add(number);
+  }
+
+  assert.strictEqual(announcedNumbers.size, 90);
+
+  assert.strictEqual(
+    engine.getGame().remainingNumbers.length,
+    0
+  );
+
+  assert.strictEqual(
+    engine.getGame().numbersAnnouncedThisRound,
+    90
+  );
+
+  console.log(
+    "✅ All 90 numbers announcement test passed"
+  );
+}
+
+function testAnnouncementAfter90NumbersFails(): void {
+  const engine = createEngineWithPlayers();
+
+  engine.getGame().config.numbersPerRound = 90;
+
+  for (let i = 0; i < 90; i++) {
+    engine.announceNextNumber();
+  }
+
+  assert.throws(
+    () => {
+      engine.announceNextNumber();
+    },
+    /Maximum number of announcements for this round has been reached/
+  );
+
+  console.log(
+    "✅ Announcement after 90 numbers test passed"
+  );
+}
+
+function testFullHouseCannotBeClaimedEarly(): void {
+  const engine = createEngineWithPlayers();
+
+  const allNumbers = [
+    1, 10, 20, 30, 40,
+    2, 21, 41, 50, 70,
+    3, 31, 51, 60, 80,
+  ];
+
+  announceNumbers(engine, allNumbers);
+
+  markNumbers(engine, "player-1", allNumbers);
+
+  assert.throws(
+    () => {
+      engine.claimWinner(
+        "player-1",
+        "FULL_HOUSE"
+      );
+    },
+    /Full House cannot be claimed until all other winning categories have been claimed/
+  );
+
+  assert.strictEqual(
+    engine.getGame().winners.length,
+    0
+  );
+
+  assert.strictEqual(
+    engine.getGame().status,
+    "ACTIVE"
+  );
+
+  console.log(
+    "✅ Early Full House rejection test passed"
+  );
+}
+
+function testCompletedGameRejectsFurtherActions(): void {
+  const engine = createEngineWithPlayers();
+
+  const allNumbers = [
+    1, 10, 20, 30, 40,
+    2, 21, 41, 50, 70,
+    3, 31, 51, 60, 80,
+  ];
+
+  // Announce and mark all ticket numbers
+  announceNumbers(engine, allNumbers);
+  markNumbers(engine, "player-1", allNumbers);
+
+  // Claim all required categories first
+  engine.claimWinner("player-1", "FIRST_5");
+  engine.claimWinner("player-1", "ONE_LINE");
+  engine.claimWinner("player-1", "TWO_LINES");
+  engine.claimWinner("player-1", "THREE_LINES");
+
+  // Full House completes the game
+  const result = engine.claimWinner(
+    "player-1",
+    "FULL_HOUSE"
+  );
+
+  assert.strictEqual(result, true);
+
+  assert.strictEqual(
+    engine.getGame().status,
+    "COMPLETED"
+  );
+
+  // Cannot announce after completion
+  assert.throws(
+    () => {
+      engine.announceNextNumber();
+    },
+    /Game is not active/
+  );
+
+  // Cannot mark after completion
+  assert.throws(
+    () => {
+      engine.markNumber("player-1", 1);
+    },
+    /Game is not active/
+  );
+
+  // Cannot claim another winner after completion
+  assert.throws(
+    () => {
+      engine.claimWinner("player-2", "FIRST_5");
+    },
+    /Game is not active/
+  );
+
+  console.log(
+    "✅ Completed game rejects further actions test passed"
+  );
+}
 
 function runTests(): void {
   console.log("\n===== GAME ENGINE TESTS =====\n");
@@ -330,11 +478,14 @@ function runTests(): void {
   testPlayerCannotJoinAfterStart();
   testInvalidTicketRejected();
   testWinnerCategoryCanBeClaimedOnlyOnce();
-  testFullHouseCompletesGame();
+  //testFullHouseCompletesGame();
   testGameStartsWithWaitingStatus();
   testCannotStartEmptyGame();
   testGameStoresStartTime();
-
+  testAll90NumbersCanBeAnnounced();
+  testAnnouncementAfter90NumbersFails();
+  testFullHouseCannotBeClaimedEarly();
+  testCompletedGameRejectsFurtherActions();
   console.log("\n🎉 All tests passed!\n");
 }
 

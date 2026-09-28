@@ -76,7 +76,6 @@ export class AnnouncementEngine {
           `${game.config.numbersPerRound})`
         );
 
-        this.onNumberAnnounced(gameId, number);
 
         if (gameEngine.isRoundComplete()) {
           break;

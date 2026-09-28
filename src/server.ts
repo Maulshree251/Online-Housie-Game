@@ -10,6 +10,7 @@ import { Ticket } from "./models/ticket";
 import { WinnerType } from "./models/game";
 import { gameSchedule } from "./config/gameSchedule";
 import { AnnouncementEngine } from "./game/announcementEngine";
+import authRoutes from "./routes/authRoutes";
 
 const app = express();
 const httpServer = createServer(app);
@@ -19,6 +20,12 @@ const io = new Server(httpServer, {
     origin: "*",
   },
 });
+
+app.use(express.json());
+app.use(
+  "/api/auth",
+  authRoutes
+);
 
 const gameRepository = new GameRepository();
 const gameManager = new GameManager(gameRepository);
