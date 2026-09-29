@@ -11,6 +11,7 @@ import { WinnerType } from "./models/game";
 import { gameSchedule } from "./config/gameSchedule";
 import { AnnouncementEngine } from "./game/announcementEngine";
 import authRoutes from "./routes/authRoutes";
+import { createGameRoutes } from "./routes/gameRoutes";
 
 const app = express();
 const httpServer = createServer(app);
@@ -27,8 +28,11 @@ app.use(
   authRoutes
 );
 
+
 const gameRepository = new GameRepository();
 const gameManager = new GameManager(gameRepository);
+app.use("/api/games", createGameRoutes(gameManager));
+
 const announcementEngine = new AnnouncementEngine(
   gameManager,
   (gameId, number) => {

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { AuthService } from "../auth/authService";
+import { AuthService } from "../auth/authService"; import { AuthenticatedRequest } from "../middleware/authMiddleware";
 
 export class AuthController {
 
@@ -50,4 +50,64 @@ export class AuthController {
             });
         }
     };
+    public login = async (
+        req: Request,
+        res: Response
+    ): Promise<void> => {
+        try {
+            const result = await this.authService.login(req.body);
+
+            res.status(200).json({
+                success: true,
+                data: result,
+            });
+        } catch (error) {
+            res.status(401).json({
+                success: false,
+                error: {
+                    code: "INVALID_CREDENTIALS",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Invalid email or password.",
+                },
+            });
+        }
+    };
+    public me = async (
+        req: AuthenticatedRequest,
+        res: Response
+    ): Promise<void> => {
+        try {
+            if (!req.userId) {
+                res.status(401).json({
+                    success: false,
+                    error: {
+                        code: "UNAUTHENTICATED",
+                        message: "Authentication required.",
+                    },
+                });
+                return;
+            }
+
+            const user = await this.authService.getCurrentUser(req.userId);
+
+            res.status(200).json({
+                success: true,
+                data: user,
+            });
+        } catch (error) {
+            res.status(404).json({
+                success: false,
+                error: {
+                    code: "USER_NOT_FOUND",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "User not found.",
+                },
+            });
+        }
+    };
+
 }

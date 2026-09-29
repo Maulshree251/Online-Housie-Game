@@ -1,5 +1,5 @@
 import { Router } from "express";
-
+import { requireAuth } from "../middleware/authMiddleware";
 import { UserRepository } from "../repositories/userRepository";
 import { AuthService } from "../auth/authService";
 import { AuthController } from "../controllers/authController";
@@ -18,5 +18,9 @@ router.post(
     "/register",
     authController.register
 );
+
+router.post("/login", authController.login);
+router.get("/me", requireAuth, authController.me);
+
 
 export default router;
