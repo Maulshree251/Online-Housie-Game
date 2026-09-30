@@ -129,7 +129,7 @@ function generateUniqueNumbers(
   return numbers;
 }
 
-function fillTicketNumbers(ticket: Ticket): Ticket {
+export function fillTicketNumbers(ticket: Ticket): Ticket {
   for (let column = 0; column < COLUMNS; column++) {
     const { min, max } = COLUMN_RANGES[column];
 
