@@ -31,7 +31,7 @@ app.use(
 
 const gameRepository = new GameRepository();
 const gameManager = new GameManager(gameRepository);
-app.use("/api/games", createGameRoutes(gameManager));
+app.use("/api/games", createGameRoutes(gameManager, gameRepository));
 
 const announcementEngine = new AnnouncementEngine(
   gameManager,

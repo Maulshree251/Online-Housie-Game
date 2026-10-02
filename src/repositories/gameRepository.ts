@@ -163,4 +163,29 @@ export class GameRepository {
             databaseToGame(document)
         );
     }
+
+    public async findCompletedGames(): Promise<Game[]> {
+        const documents = await GameModel.find({
+            status: "COMPLETED",
+        }).sort({ completedAt: -1 });
+
+        return documents.map((document) =>
+            databaseToGame(document)
+        );
+    }
+
+    public async findCompletedGameById(
+        gameId: string
+    ): Promise<Game | null> {
+        const document = await GameModel.findOne({
+            id: gameId,
+            status: "COMPLETED",
+        });
+
+        if (!document) {
+            return null;
+        }
+
+        return databaseToGame(document);
+    }
 }
