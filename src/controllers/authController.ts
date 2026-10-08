@@ -110,4 +110,197 @@ export class AuthController {
         }
     };
 
+    public refresh = async (
+        req: Request,
+        res: Response
+    ): Promise<void> => {
+
+        try {
+            const { refreshToken } = req.body;
+
+            const result =
+                await this.authService.refresh(
+                    refreshToken
+                );
+
+            res.status(200).json({
+                success: true,
+                data: result,
+            });
+
+        } catch (error) {
+
+            res.status(401).json({
+                success: false,
+                error: {
+                    code: "INVALID_REFRESH_TOKEN",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Invalid refresh token.",
+                },
+            });
+        }
+    };
+
+    public logout = async (
+        req: Request,
+        res: Response
+    ): Promise<void> => {
+
+        try {
+            const { refreshToken } = req.body;
+
+            await this.authService.logout(
+                refreshToken
+            );
+
+            res.status(200).json({
+                success: true,
+                data: {
+                    message: "Logged out successfully.",
+                },
+            });
+
+        } catch (error) {
+
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: "LOGOUT_FAILED",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Logout failed.",
+                },
+            });
+        }
+    };
+
+    public changePassword = async (
+        req: AuthenticatedRequest,
+        res: Response
+    ): Promise<void> => {
+
+        try {
+            const userId = req.userId;
+
+            if (!userId) {
+                res.status(401).json({
+                    success: false,
+                    error: {
+                        code: "UNAUTHENTICATED",
+                        message: "Authentication required.",
+                    },
+                });
+                return;
+            }
+
+            const {
+                currentPassword,
+                newPassword,
+            } = req.body;
+
+            await this.authService.changePassword(
+                userId,
+                currentPassword,
+                newPassword
+            );
+
+            res.status(200).json({
+                success: true,
+                data: {
+                    message:
+                        "Password changed successfully.",
+                },
+            });
+
+        } catch (error) {
+
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: "PASSWORD_CHANGE_FAILED",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to change password.",
+                },
+            });
+        }
+    };
+
+    public forgotPassword = async (
+        req: Request,
+        res: Response
+    ): Promise<void> => {
+
+        try {
+
+            const { email } = req.body;
+
+            const result =
+                await this.authService.forgotPassword(
+                    email
+                );
+
+            res.status(200).json({
+                success: true,
+                data: result,
+            });
+
+        } catch (error) {
+
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: "FORGOT_PASSWORD_FAILED",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Unable to process request.",
+                },
+            });
+        }
+    };
+
+    public resetPassword = async (
+        req: Request,
+        res: Response
+    ): Promise<void> => {
+
+        try {
+
+            const {
+                resetToken,
+                newPassword,
+            } = req.body;
+
+            await this.authService.resetPassword(
+                resetToken,
+                newPassword
+            );
+
+            res.status(200).json({
+                success: true,
+                data: {
+                    message:
+                        "Password reset successfully.",
+                },
+            });
+
+        } catch (error) {
+
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: "PASSWORD_RESET_FAILED",
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Unable to reset password.",
+                },
+            });
+        }
+    };
 }

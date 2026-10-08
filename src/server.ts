@@ -1,9 +1,9 @@
 import { connectDatabase } from "./database/connection";
 import { GameRepository } from "./repositories/gameRepository";
+import { RefreshSessionRepository } from "./repositories/refreshSessionRepository";
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
-import { Server, Socket } from "socket.io";
 import { GameScheduler } from "./game/gameScheduler";
 import { GameManager } from "./game/gameManager";
 import { Ticket } from "./models/ticket";
@@ -12,6 +12,11 @@ import { gameSchedule } from "./config/gameSchedule";
 import { AnnouncementEngine } from "./game/announcementEngine";
 import authRoutes from "./routes/authRoutes";
 import { createGameRoutes } from "./routes/gameRoutes";
+import userRoutes from "./routes/userRoutes";
+import { verifyAccessToken } from "./auth/tokenService";
+import { AuthenticatedSocket } from "./types/socket";
+import { Server } from "socket.io";
+import { RealtimeEvent } from "./realtime/realtimeEvents";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,12 +27,18 @@ const io = new Server(httpServer, {
   },
 });
 
+import { RealtimeService } from "./realtime/realtimeService";
+import { Socket } from "dgram";
+const realtimeService = new RealtimeService(io);
 app.use(express.json());
 app.use(
   "/api/auth",
   authRoutes
 );
-
+app.use(
+  "/api/users",
+  userRoutes
+);
 
 const gameRepository = new GameRepository();
 const gameManager = new GameManager(gameRepository);
@@ -37,16 +48,22 @@ const announcementEngine = new AnnouncementEngine(
   gameManager,
   (gameId, number) => {
     const gameEngine = gameManager.getGame(gameId);
+    const game = gameEngine.getGame();
 
-    io.to(getGameRoom(gameId)).emit(
-      "game:numberAnnounced",
+    realtimeService.emitToGame(
+      gameId,
+      RealtimeEvent.NUMBER_ANNOUNCED,
       {
+        gameId,
         number,
-        state: getSafeGameState(gameId),
+        round: game.currentRound,
+        announcedCount: game.numbersAnnouncedThisRound,
+        totalNumbers: game.announcedNumbers.length,
       }
     );
   }
 );
+
 const gameScheduler =
   new GameScheduler(
     gameManager,
@@ -81,7 +98,7 @@ function getGameRoom(gameId: string): string {
 }
 
 
-function getConnectedPlayer(socket: Socket): ConnectedPlayer {
+function getConnectedPlayer(socket: AuthenticatedSocket): ConnectedPlayer {
   const connectedPlayer = socketPlayers.get(socket.id);
 
   if (!connectedPlayer) {
@@ -92,7 +109,7 @@ function getConnectedPlayer(socket: Socket): ConnectedPlayer {
 }
 
 
-function requireHost(socket: Socket, gameId: string): string {
+function requireHost(socket: AuthenticatedSocket, gameId: string): string {
   const { playerId } = getConnectedPlayer(socket);
 
   const gameEngine = gameManager.getGame(gameId);
@@ -122,11 +139,11 @@ function getSafeGameState(gameId: string) {
 }
 
 
-function sendError(socket: Socket, error: unknown): void {
+function sendError(socket: AuthenticatedSocket, error: unknown): void {
   const message =
     error instanceof Error ? error.message : "Something went wrong.";
 
-  socket.emit("game:error", {
+  socket.emit("GAME_ERROR", {
     message,
   });
 }
@@ -145,7 +162,7 @@ app.get("/", (_req, res) => {
 // SOCKET.IO CONNECTION
 // --------------------------------------------------
 
-io.on("connection", (socket: Socket) => {
+io.on("connection", (socket: AuthenticatedSocket) => {
   console.log(`Client connected: ${socket.id}`);
 
 
@@ -176,64 +193,52 @@ io.on("connection", (socket: Socket) => {
 
   socket.on(
     "game:join",
-    async ({
-      gameId,
-      playerId,
-      ticket,
-    }: {
-      gameId: string;
-      playerId: string;
-      ticket: Ticket;
-    }) => {
+    async ({ gameId }: { gameId: string }) => {
       try {
-        if (socketPlayers.has(socket.id)) {
-          throw new Error("You have already joined a game.");
-        }
+        const userId = socket.data.userId;
 
         const gameEngine = gameManager.getGame(gameId);
+        const game = gameEngine.getGame();
 
-        gameEngine.addPlayerTicket(playerId, ticket);
+        const player = game.playerTickets.find(
+          (player) => player.playerId === userId
+        );
 
-        if (gameEngine.getHostPlayerId() === null) {
-          gameEngine.assignHost(playerId);
-
-          socket.emit("game:hostAssigned", {
-            gameId,
-            playerId,
-          });
+        if (!player) {
+          throw new Error(
+            "You are not a participant in this game."
+          );
         }
-        await saveGameState(gameId);
 
-        socketPlayers.set(socket.id, {
-          playerId,
-          gameId,
-        });
-
-        // // Assign the first successful player as host
-        // if (!gameHosts.has(gameId)) {
-        //   gameHosts.set(gameId, playerId);
-
-        //   socket.emit("game:hostAssigned", {
-        //     gameId,
-        //     playerId,
-        //   });
-        // }
-
-        const room = getGameRoom(gameId);
+        const room = `game:${gameId}`;
 
         socket.join(room);
 
-        socket.emit("game:state", getSafeGameState(gameId));
-
-        socket.to(room).emit("game:playerJoined", {
-          playerId,
+        socket.emit("GAME_STATE", {
+          event: "GAME_STATE",
+          data: {
+            gameId,
+            status: game.status,
+            currentRound: game.currentRound,
+            announcedNumbers: game.announcedNumbers,
+            playerCount: game.playerTickets.length,
+            winners: game.winners,
+          },
         });
 
-        io.to(room).emit("game:state", getSafeGameState(gameId));
-
-        console.log(`${playerId} joined game ${gameId}`);
+        console.log(
+          `User ${userId} joined socket room ${room}`
+        );
       } catch (error) {
-        sendError(socket, error);
+        socket.emit("GAME_ERROR", {
+          event: "GAME_ERROR",
+          data: {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unable to join game room.",
+          },
+        });
       }
     }
   );

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateTicketLayout = generateTicketLayout;
+exports.fillTicketNumbers = fillTicketNumbers;
 exports.validateTicket = validateTicket;
 const ROWS = 3;
 const COLUMNS = 9;

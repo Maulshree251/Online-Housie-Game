@@ -56,4 +56,48 @@ export class UserRepository {
 
         return databaseToUser(document);
     }
+
+    public async updatePassword(
+        userId: string,
+        passwordHash: string
+    ): Promise<void> {
+
+        await UserModel.updateOne(
+            { id: userId },
+            {
+                $set: {
+                    passwordHash,
+                    updatedAt: new Date(),
+                },
+            }
+        );
+    }
+
+    public async updateProfile(
+        userId: string,
+        updates: {
+            name?: string;
+            email?: string;
+        }
+    ): Promise<User | null> {
+
+        const document = await UserModel.findOneAndUpdate(
+            { id: userId },
+            {
+                $set: {
+                    ...updates,
+                    updatedAt: new Date(),
+                },
+            },
+            {
+                new: true,
+            }
+        );
+
+        if (!document) {
+            return null;
+        }
+
+        return databaseToUser(document);
+    }
 }

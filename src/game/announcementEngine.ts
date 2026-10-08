@@ -6,17 +6,13 @@ export type NumberAnnouncementHandler = (
 ) => void;
 
 export class AnnouncementEngine {
-  private gameManager: GameManager;
-  private onNumberAnnounced: NumberAnnouncementHandler;
   private runningGames: Set<string> = new Set();
 
   constructor(
-    gameManager: GameManager,
-    onNumberAnnounced: NumberAnnouncementHandler
-  ) {
-    this.gameManager = gameManager;
-    this.onNumberAnnounced = onNumberAnnounced;
-  }
+    private gameManager: GameManager,
+    private onNumberAnnounced: NumberAnnouncementHandler,
+    private onRoundCompleted?: (gameId: string, round: number) => void
+  ) { }
 
   public isRunning(gameId: string): boolean {
     return this.runningGames.has(gameId);

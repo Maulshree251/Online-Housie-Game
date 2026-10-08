@@ -13,6 +13,8 @@ const gameScheduler_1 = require("./game/gameScheduler");
 const gameManager_1 = require("./game/gameManager");
 const gameSchedule_1 = require("./config/gameSchedule");
 const announcementEngine_1 = require("./game/announcementEngine");
+const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
+const gameRoutes_1 = require("./routes/gameRoutes");
 const app = (0, express_1.default)();
 const httpServer = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(httpServer, {
@@ -20,8 +22,11 @@ const io = new socket_io_1.Server(httpServer, {
         origin: "*",
     },
 });
+app.use(express_1.default.json());
+app.use("/api/auth", authRoutes_1.default);
 const gameRepository = new gameRepository_1.GameRepository();
 const gameManager = new gameManager_1.GameManager(gameRepository);
+app.use("/api/games", (0, gameRoutes_1.createGameRoutes)(gameManager, gameRepository));
 const announcementEngine = new announcementEngine_1.AnnouncementEngine(gameManager, (gameId, number) => {
     const gameEngine = gameManager.getGame(gameId);
     io.to(getGameRoom(gameId)).emit("game:numberAnnounced", {

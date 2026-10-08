@@ -287,5 +287,19 @@ class GameEngine {
         this.game.roundStartedAt = new Date();
         this.game.numbersAnnouncedThisRound = 0;
     }
+    removePlayer(playerId) {
+        if (this.game.status !== "WAITING") {
+            throw new Error("Players can only leave while the game is waiting.");
+        }
+        const playerIndex = this.game.playerTickets.findIndex((player) => player.playerId === playerId);
+        if (playerIndex === -1) {
+            throw new Error("Player is not part of this game.");
+        }
+        this.game.playerTickets.splice(playerIndex, 1);
+        // If the host leaves, there is temporarily no host.
+        if (this.game.hostPlayerId === playerId) {
+            this.game.hostPlayerId = null;
+        }
+    }
 }
 exports.GameEngine = GameEngine;
