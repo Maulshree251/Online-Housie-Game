@@ -1,13 +1,10 @@
 import { connectDatabase } from "./database/connection";
 import { GameRepository } from "./repositories/gameRepository";
-import { RefreshSessionRepository } from "./repositories/refreshSessionRepository";
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import { GameScheduler } from "./game/gameScheduler";
 import { GameManager } from "./game/gameManager";
-import { Ticket } from "./models/ticket";
-import { WinnerType } from "./models/game";
 import { gameSchedule } from "./config/gameSchedule";
 import { AnnouncementEngine } from "./game/announcementEngine";
 import authRoutes from "./routes/authRoutes";
@@ -17,19 +14,19 @@ import { verifyAccessToken } from "./auth/tokenService";
 import { AuthenticatedSocket } from "./types/socket";
 import { Server } from "socket.io";
 import { RealtimeEvent } from "./realtime/realtimeEvents";
+import { RealtimeService } from "./realtime/realtimeService";
 
 const app = express();
 const httpServer = createServer(app);
-
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
   },
 });
-
-import { RealtimeService } from "./realtime/realtimeService";
-import { Socket } from "dgram";
+const gameRepository = new GameRepository();
+const gameManager = new GameManager(gameRepository);
 const realtimeService = new RealtimeService(io);
+
 app.use(express.json());
 app.use(
   "/api/auth",
@@ -40,15 +37,19 @@ app.use(
   userRoutes
 );
 
-const gameRepository = new GameRepository();
-const gameManager = new GameManager(gameRepository);
-app.use("/api/games", createGameRoutes(gameManager, gameRepository));
+app.use(
+  "/api/games",
+  createGameRoutes(
+    gameManager,
+    gameRepository,
+    realtimeService
+  )
+);
 
 const announcementEngine = new AnnouncementEngine(
   gameManager,
   (gameId, number) => {
-    const gameEngine = gameManager.getGame(gameId);
-    const game = gameEngine.getGame();
+    const game = gameManager.getGame(gameId).getGame();
 
     realtimeService.emitToGame(
       gameId,
@@ -61,6 +62,16 @@ const announcementEngine = new AnnouncementEngine(
         totalNumbers: game.announcedNumbers.length,
       }
     );
+  },
+  (gameId, round) => {
+    realtimeService.emitToGame(
+      gameId,
+      RealtimeEvent.ROUND_COMPLETED,
+      {
+        gameId,
+        round,
+      }
+    );
   }
 );
 
@@ -68,85 +79,88 @@ const gameScheduler =
   new GameScheduler(
     gameManager,
     announcementEngine,
-    gameSchedule
+    gameSchedule,
+    realtimeService
   );
-async function saveGameState(gameId: string): Promise<void> {
-  await gameManager.saveGame(gameId);
 
-  console.log(`Game ${gameId} saved to MongoDB.`);
-}
+// async function saveGameState(gameId: string): Promise<void> {
+
+
+//   await gameManager.saveGame(gameId);
+//   console.log(`Game ${gameId} saved to MongoDB.`);
+// }
 
 const PORT = 3000;
 
 // Stores the player and game associated with each socket
-interface ConnectedPlayer {
-  playerId: string;
-  gameId: string;
-}
+// interface ConnectedPlayer {
+//   playerId: string;
+//   gameId: string;
+// }
 
-const socketPlayers = new Map<string, ConnectedPlayer>();
-
-
+// const socketPlayers = new Map<string, ConnectedPlayer>();
 
 
-// --------------------------------------------------
-// HELPER FUNCTIONS
-// --------------------------------------------------
-
-function getGameRoom(gameId: string): string {
-  return `game:${gameId}`;
-}
 
 
-function getConnectedPlayer(socket: AuthenticatedSocket): ConnectedPlayer {
-  const connectedPlayer = socketPlayers.get(socket.id);
+// // --------------------------------------------------
+// // HELPER FUNCTIONS
+// // --------------------------------------------------
 
-  if (!connectedPlayer) {
-    throw new Error("You must join a game first.");
-  }
-
-  return connectedPlayer;
-}
+// function getGameRoom(gameId: string): string {
+//   return `game:${gameId}`;
+// }
 
 
-function requireHost(socket: AuthenticatedSocket, gameId: string): string {
-  const { playerId } = getConnectedPlayer(socket);
+// function getConnectedPlayer(socket: AuthenticatedSocket): ConnectedPlayer {
+//   const connectedPlayer = socketPlayers.get(socket.id);
 
-  const gameEngine = gameManager.getGame(gameId);
+//   if (!connectedPlayer) {
+//     throw new Error("You must join a game first.");
+//   }
 
-  if (playerId !== gameEngine.getHostPlayerId()) {
-    throw new Error(
-      "Only the game host can perform this action."
-    );
-  }
-
-  return playerId;
-}
+//   return connectedPlayer;
+// }
 
 
-function getSafeGameState(gameId: string) {
-  const gameEngine = gameManager.getGame(gameId);
-  const game = gameEngine.getGame();
+// function requireHost(socket: AuthenticatedSocket, gameId: string): string {
+//   const { playerId } = getConnectedPlayer(socket);
 
-  return {
-    id: game.id,
-    status: game.status,
-    announcedNumbers: game.announcedNumbers,
-    remainingNumbersCount: game.remainingNumbers.length,
-    playerCount: game.playerTickets.length,
-    winners: game.winners,
-  };
-}
+//   const gameEngine = gameManager.getGame(gameId);
+
+//   if (playerId !== gameEngine.getHostPlayerId()) {
+//     throw new Error(
+//       "Only the game host can perform this action."
+//     );
+//   }
+
+//   return playerId;
+// }
 
 
-function sendError(socket: AuthenticatedSocket, error: unknown): void {
-  const message =
-    error instanceof Error ? error.message : "Something went wrong.";
+// function getSafeGameState(gameId: string) {
+//   const gameEngine = gameManager.getGame(gameId);
+//   const game = gameEngine.getGame();
 
-  socket.emit("GAME_ERROR", {
-    message,
-  });
-}
+//   return {
+//     id: game.id,
+//     status: game.status,
+//     announcedNumbers: game.announcedNumbers,
+//     remainingNumbersCount: game.remainingNumbers.length,
+//     playerCount: game.playerTickets.length,
+//     winners: game.winners,
+//   };
+// }
+
+
+// function sendError(socket: AuthenticatedSocket, error: unknown): void {
+//   const message =
+//     error instanceof Error ? error.message : "Something went wrong.";
+
+//   socket.emit("GAME_ERROR", {
+//     message,
+//   });
+// }
 
 
 // --------------------------------------------------
@@ -162,47 +176,57 @@ app.get("/", (_req, res) => {
 // SOCKET.IO CONNECTION
 // --------------------------------------------------
 
-io.on("connection", (socket: AuthenticatedSocket) => {
+// --------------------------------------------------
+// SOCKET.IO AUTHENTICATION
+// --------------------------------------------------
+
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+
+    if (!token || typeof token !== "string") {
+      return next(new Error("UNAUTHENTICATED"));
+    }
+
+    const payload = verifyAccessToken(token);
+
+    socket.data.userId = payload.userId;
+
+    next();
+  } catch {
+    next(new Error("INVALID_TOKEN"));
+  }
+});
+
+
+// --------------------------------------------------
+// SOCKET.IO CONNECTION
+// --------------------------------------------------
+
+io.on("connection", (rawSocket) => {
+
+  const socket = rawSocket as AuthenticatedSocket;
+
   console.log(`Client connected: ${socket.id}`);
 
-
-  // ------------------------------------------------
-  // CREATE A NEW GAME
-  // ------------------------------------------------
-
-  socket.on("game:create", async () => {
-    try {
-      const gameEngine = await gameManager.createGame();
-
-      const gameId = gameEngine.getGame().id;
-
-      socket.emit("game:created", {
-        gameId,
-      });
-
-      console.log(`New game created: ${gameId}`);
-    } catch (error) {
-      sendError(socket, error);
-    }
-  });
-
-
-  // ------------------------------------------------
-  // JOIN A GAME
-  // ------------------------------------------------
-
   socket.on(
-    "game:join",
+    "joinGame",
     async ({ gameId }: { gameId: string }) => {
+
       try {
+
         const userId = socket.data.userId;
 
-        const gameEngine = gameManager.getGame(gameId);
+        const gameEngine =
+          gameManager.getGame(gameId);
+
         const game = gameEngine.getGame();
 
-        const player = game.playerTickets.find(
-          (player) => player.playerId === userId
-        );
+        const player =
+          game.playerTickets.find(
+            (player) =>
+              player.playerId === userId
+          );
 
         if (!player) {
           throw new Error(
@@ -214,219 +238,54 @@ io.on("connection", (socket: AuthenticatedSocket) => {
 
         socket.join(room);
 
-        socket.emit("GAME_STATE", {
-          event: "GAME_STATE",
-          data: {
-            gameId,
-            status: game.status,
-            currentRound: game.currentRound,
-            announcedNumbers: game.announcedNumbers,
-            playerCount: game.playerTickets.length,
-            winners: game.winners,
-          },
-        });
+        socket.emit(
+          RealtimeEvent.GAME_STATE,
+          {
+            event: RealtimeEvent.GAME_STATE,
+
+            data: {
+              gameId,
+              status: game.status,
+              currentRound:
+                game.currentRound,
+              announcedNumbers:
+                game.announcedNumbers,
+              playerCount:
+                game.playerTickets.length,
+              winners: game.winners,
+            },
+          }
+        );
 
         console.log(
           `User ${userId} joined socket room ${room}`
         );
+
       } catch (error) {
-        socket.emit("GAME_ERROR", {
-          event: "GAME_ERROR",
-          data: {
-            message:
-              error instanceof Error
-                ? error.message
-                : "Unable to join game room.",
-          },
-        });
-      }
-    }
-  );
 
+        socket.emit(
+          RealtimeEvent.GAME_ERROR,
+          {
+            event: RealtimeEvent.GAME_ERROR,
 
-  // ------------------------------------------------
-  // START GAME
-  // ------------------------------------------------
-
-  socket.on("game:start", async ({ gameId }: { gameId: string }) => {
-    try {
-      requireHost(socket, gameId);
-
-      const gameEngine = gameManager.getGame(gameId);
-
-      gameEngine.startGame();
-      await saveGameState(gameId);
-      const room = getGameRoom(gameId);
-
-      io.to(room).emit("game:started", {
-        gameId,
-      });
-
-      io.to(room).emit("game:state", getSafeGameState(gameId));
-
-      console.log(`Game started: ${gameId}`);
-    } catch (error) {
-      sendError(socket, error);
-    }
-  });
-
-
-  // ------------------------------------------------
-  // ANNOUNCE NEXT NUMBER
-  // ------------------------------------------------
-
-  // socket.on("game:announce", async ({ gameId }: { gameId: string }) => {
-  //   try {
-  //     requireHost(socket, gameId);
-
-  //     const gameEngine = gameManager.getGame(gameId);
-  //     const number = gameEngine.announceNextNumber();
-  //     await saveGameState(gameId);
-  //     const room = getGameRoom(gameId);
-
-  //     io.to(room).emit("game:numberAnnounced", {
-  //       gameId,
-  //       number,
-  //     });
-
-  //     io.to(room).emit("game:state", getSafeGameState(gameId));
-
-  //     console.log(`Number ${number} announced in game ${gameId}`);
-  //   } catch (error) {
-  //     sendError(socket, error);
-  //   }
-  // });
-
-
-  // ------------------------------------------------
-  // GET GAME STATE
-  // ------------------------------------------------
-
-  socket.on("game:getState", ({ gameId }: { gameId: string }) => {
-    try {
-      socket.emit("game:state", getSafeGameState(gameId));
-    } catch (error) {
-      sendError(socket, error);
-    }
-  });
-
-
-  // ------------------------------------------------
-  // MARK A NUMBER
-  // ------------------------------------------------
-
-  socket.on(
-    "game:markNumber",
-    async ({
-      gameId,
-      number,
-    }: {
-      gameId: string;
-      number: number;
-    }) => {
-      try {
-        const connectedPlayer = getConnectedPlayer(socket);
-
-        if (connectedPlayer.gameId !== gameId) {
-          throw new Error("You are not connected to this game.");
-        }
-
-        const gameEngine = gameManager.getGame(gameId);
-        gameEngine.markNumber(connectedPlayer.playerId, number);
-        await saveGameState(gameId);
-        socket.emit("game:numberMarked", {
-          gameId,
-          playerId: connectedPlayer.playerId,
-          number,
-        });
-      } catch (error) {
-        sendError(socket, error);
-      }
-    }
-  );
-
-
-  // ------------------------------------------------
-  // CLAIM WINNER
-  // ------------------------------------------------
-
-  socket.on(
-    "game:claimWinner",
-    async ({
-      gameId,
-      winnerType,
-    }: {
-      gameId: string;
-      winnerType: WinnerType;
-    }) => {
-      try {
-        const connectedPlayer = getConnectedPlayer(socket);
-
-        if (connectedPlayer.gameId !== gameId) {
-          throw new Error("You are not connected to this game.");
-        }
-
-        const gameEngine = gameManager.getGame(gameId);
-        const isWinner = gameEngine.claimWinner(
-          connectedPlayer.playerId,
-          winnerType
+            data: {
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to join game room.",
+            },
+          }
         );
-
-        const room = getGameRoom(gameId);
-
-        if (!isWinner) {
-          socket.emit("game:claimRejected", {
-            gameId,
-            winnerType,
-            message: "You have not completed this winning condition.",
-          });
-
-          return;
-        }
-        await saveGameState(gameId);
-        io.to(room).emit("game:winnerDeclared", {
-          gameId,
-          playerId: connectedPlayer.playerId,
-          winnerType,
-        });
-        if (
-          winnerType === "FULL_HOUSE" &&
-          gameEngine.getGame().status === "COMPLETED"
-        ) {
-          console.log(
-            `Game ${gameId} completed with Full House.`
-          );
-
-          await gameManager.ensureWaitingGame();
-        }
-        io.to(room).emit("game:state", getSafeGameState(gameId));
-
-        console.log(
-          `${connectedPlayer.playerId} won ${winnerType} in game ${gameId}`
-        );
-      } catch (error) {
-        sendError(socket, error);
       }
     }
   );
-
-
-  // ------------------------------------------------
-  // DISCONNECT
-  // ------------------------------------------------
 
   socket.on("disconnect", () => {
-    const connectedPlayer = socketPlayers.get(socket.id);
 
-    if (connectedPlayer) {
-      console.log(
-        `${connectedPlayer.playerId} disconnected from game ${connectedPlayer.gameId}`
-      );
+    console.log(
+      `Client disconnected: ${socket.id}`
+    );
 
-      socketPlayers.delete(socket.id);
-    }
-
-    console.log(`Client disconnected: ${socket.id}`);
   });
 });
 

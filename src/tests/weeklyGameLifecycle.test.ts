@@ -10,6 +10,8 @@ import {
 
 import { generateTicketLayout } from "../tickets/ticketGenerator";
 import { gameSchedule, GameScheduleConfig } from "../config/gameSchedule";
+import { RealtimeService } from "../realtime/realtimeService";
+import { Server } from "socket.io";
 
 describe("Weekly Game Lifecycle", () => {
     let gameManager: GameManager;
@@ -18,6 +20,11 @@ describe("Weekly Game Lifecycle", () => {
     let scheduler: GameScheduler;
 
     let testGameId: string | null = null;
+    let realtimeService: RealtimeService;
+    const mockIo = {
+        to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+        sockets: { sockets: new Map() },
+    } as unknown as Server;
 
     beforeAll(async () => {
         await connectDatabase();
@@ -26,6 +33,7 @@ describe("Weekly Game Lifecycle", () => {
 
         gameManager =
             new GameManager(gameRepository);
+        realtimeService = new RealtimeService(mockIo);
 
         announcementEngine =
             new AnnouncementEngine(
@@ -50,7 +58,8 @@ describe("Weekly Game Lifecycle", () => {
             new GameScheduler(
                 gameManager,
                 announcementEngine,
-                scheduleConfig
+                scheduleConfig,
+                realtimeService
             );
     });
 

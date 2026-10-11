@@ -2,15 +2,14 @@ import { GameManager } from "../game/gameManager";
 import { GameRepository } from "../repositories/gameRepository";
 import { GameScheduler } from "../game/gameScheduler";
 import { AnnouncementEngine } from "../game/announcementEngine";
-
 import {
     connectDatabase,
     disconnectDatabase,
 } from "../database/connection";
-
 import { generateTicketLayout } from "../tickets/ticketGenerator";
 import { gameSchedule, GameScheduleConfig } from "../config/gameSchedule";
-
+import { RealtimeService } from "../realtime/realtimeService";
+import { Server } from "socket.io";
 
 describe("Full Game Lifecycle", () => {
     let gameManager: GameManager;
@@ -18,7 +17,11 @@ describe("Full Game Lifecycle", () => {
     let announcementEngine: AnnouncementEngine;
     let scheduler: GameScheduler;
     let testGameId: string | null = null;
-
+    let realtimeService: RealtimeService;
+    const mockIo = {
+        to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+        sockets: { sockets: new Map() },
+    } as unknown as Server;
 
     beforeAll(async () => {
         await connectDatabase();
@@ -33,19 +36,16 @@ describe("Full Game Lifecycle", () => {
 
         gameManager =
             new GameManager(gameRepository);
-
-
+        realtimeService = new RealtimeService(mockIo);
         announcementEngine =
             new AnnouncementEngine(
                 gameManager,
-
                 (gameId, number) => {
                     console.log(
                         `TEST: Game ${gameId} announced ${number}`
                     );
                 }
             );
-
 
         const now = new Date();
 
@@ -57,12 +57,12 @@ describe("Full Game Lifecycle", () => {
         };
 
 
-
         scheduler =
             new GameScheduler(
                 gameManager,
                 announcementEngine,
-                scheduleConfig
+                scheduleConfig,
+                realtimeService
             );
     });
 

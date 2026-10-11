@@ -3,6 +3,8 @@ import { AnnouncementEngine } from "./announcementEngine";
 import {
     GameScheduleConfig,
 } from "../config/gameSchedule";
+import { RealtimeService } from "../realtime/realtimeService";
+import { RealtimeEvent } from "../realtime/realtimeEvents";
 
 export class GameScheduler {
     private gameManager: GameManager;
@@ -18,6 +20,7 @@ export class GameScheduler {
         gameManager: GameManager,
         announcementEngine: AnnouncementEngine,
         config: GameScheduleConfig,
+        private realtimeService: RealtimeService,
         nowProvider: () => Date = () => new Date()
     ) {
         this.gameManager = gameManager;
@@ -117,6 +120,15 @@ export class GameScheduler {
                 activeGame.startNextRound();
 
                 await this.gameManager.saveGame(game.id);
+                this.realtimeService.emitToGame(
+                    game.id,
+                    RealtimeEvent.ROUND_STARTED,
+                    {
+                        gameId: game.id,
+                        round: game.currentRound,
+                        startedAt: game.roundStartedAt,
+                    }
+                );
             }
 
             // IMPORTANT:
@@ -168,6 +180,15 @@ export class GameScheduler {
         waitingGame.startGame();
 
         await this.gameManager.saveGame(game.id);
+        this.realtimeService.emitToGame(
+            game.id,
+            RealtimeEvent.ROUND_STARTED,
+            {
+                gameId: game.id,
+                round: game.currentRound,
+                startedAt: game.roundStartedAt,
+            }
+        );
 
         console.log(
             `Game ${game.id} started. Round 1 begins.`

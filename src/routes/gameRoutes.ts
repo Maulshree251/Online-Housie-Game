@@ -3,11 +3,15 @@ import { GameController } from "../controllers/gameController";
 import { GameManager } from "../game/gameManager";
 import { requireAuth } from "../middleware/authMiddleware";
 import { GameRepository } from "../repositories/gameRepository";
+import { RealtimeService } from "../realtime/realtimeService";
 
-export function createGameRoutes(gameManager: GameManager, gameRepository: GameRepository) {
+export function createGameRoutes(gameManager: GameManager,
+    gameRepository: GameRepository,
+    realtimeService: RealtimeService) {
+
     const router = Router();
 
-    const gameController = new GameController(gameManager, gameRepository);
+    const gameController = new GameController(gameManager, gameRepository, realtimeService);
 
     router.get("/current", gameController.getCurrentGame);
 

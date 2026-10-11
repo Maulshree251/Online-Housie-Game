@@ -10,6 +10,8 @@ import {
 
 import { generateTicketLayout } from "../tickets/ticketGenerator";
 import { gameSchedule, GameScheduleConfig } from "../config/gameSchedule";
+import { RealtimeService } from "../realtime/realtimeService";
+import { Server } from "socket.io";
 
 describe("Game Scheduler", () => {
     let gameManager: GameManager;
@@ -18,6 +20,11 @@ describe("Game Scheduler", () => {
     let scheduler: GameScheduler;
 
     let testGameId: string | null = null;
+    let realtimeService: RealtimeService;
+    const mockIo = {
+        to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+        sockets: { sockets: new Map() },
+    } as unknown as Server;
 
     beforeAll(async () => {
         await connectDatabase();
@@ -45,6 +52,7 @@ describe("Game Scheduler", () => {
     beforeEach(() => {
         gameManager =
             new GameManager(gameRepository);
+        realtimeService = new RealtimeService(mockIo);
 
         announcementEngine =
             new AnnouncementEngine(
@@ -91,6 +99,7 @@ describe("Game Scheduler", () => {
                     gameManager,
                     announcementEngine,
                     scheduleConfig,
+                    realtimeService,
                     () => scheduledTime
                 );
 
@@ -198,6 +207,7 @@ describe("Game Scheduler", () => {
                     gameManager,
                     announcementEngine,
                     scheduleConfig,
+                    realtimeService,
                     () => currentTime
                 );
 
@@ -299,6 +309,7 @@ describe("Game Scheduler", () => {
                     gameManager,
                     announcementEngine,
                     scheduleConfig,
+                    realtimeService,
                     () => currentTime
                 );
 

@@ -11,13 +11,15 @@ export class AnnouncementEngine {
   constructor(
     private gameManager: GameManager,
     private onNumberAnnounced: NumberAnnouncementHandler,
-    private onRoundCompleted?: (gameId: string, round: number) => void
+    private onRoundCompleted?: (
+      gameId: string,
+      round: number
+    ) => void
   ) { }
 
   public isRunning(gameId: string): boolean {
     return this.runningGames.has(gameId);
   }
-
 
   public async runWeeklyRound(gameId: string): Promise<void> {
     if (this.runningGames.has(gameId)) {
@@ -33,7 +35,6 @@ export class AnnouncementEngine {
     try {
       const gameEngine = this.gameManager.getGame(gameId);
       const game = gameEngine.getGame();
-
 
       if (game.status !== "ACTIVE") {
         console.log(
@@ -52,11 +53,10 @@ export class AnnouncementEngine {
         gameEngine.getGame().status === "ACTIVE"
       ) {
         const announcementStart = Date.now();
+
         const number = gameEngine.announceNextNumber();
-        const saveStart = Date.now();
+
         await this.gameManager.saveGame(gameId);
-        const saveEnd = Date.now();
-
 
         console.log(
           `Game ${gameId}: announced ${number} ` +
@@ -64,14 +64,8 @@ export class AnnouncementEngine {
           `${game.config.numbersPerRound})`
         );
 
+        // Realtime NUMBER_ANNOUNCED event
         this.onNumberAnnounced(gameId, number);
-
-        console.log(
-          `Game ${gameId}: announced ${number} ` +
-          `(${gameEngine.getGame().numbersAnnouncedThisRound}/` +
-          `${game.config.numbersPerRound})`
-        );
-
 
         if (gameEngine.isRoundComplete()) {
           break;
@@ -87,10 +81,21 @@ export class AnnouncementEngine {
         );
       }
 
-      console.log(
-        `Round ${game.currentRound} completed for game ${gameId}.`
-      );
+      // Only announce ROUND_COMPLETED if
+      // the configured number of announcements was reached.
+      if (gameEngine.isRoundComplete()) {
+        const completedRound =
+          gameEngine.getGame().currentRound;
 
+        console.log(
+          `Round ${completedRound} completed for game ${gameId}.`
+        );
+
+        this.onRoundCompleted?.(
+          gameId,
+          completedRound
+        );
+      }
 
     } finally {
       this.runningGames.delete(gameId);
@@ -102,6 +107,4 @@ export class AnnouncementEngine {
       setTimeout(resolve, milliseconds);
     });
   }
-
-
 }

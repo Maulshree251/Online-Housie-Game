@@ -4,29 +4,33 @@ import { AuthenticatedRequest } from "../middleware/authMiddleware";
 import { generateTicketLayout } from "../tickets/ticketGenerator";
 import { WinnerType } from "../models/game";
 import { GameRepository } from "../repositories/gameRepository";
+import { RealtimeEvent } from "../realtime/realtimeEvents";
+import { RealtimeService } from "../realtime/realtimeService";
 
 export class GameController {
-    constructor(private gameManager: GameManager, private gameRepository: GameRepository) { }
+    constructor(private gameManager: GameManager, private gameRepository: GameRepository, private realtimeService: RealtimeService) { }
 
     public getCurrentGame = async (
         req: Request,
         res: Response
     ): Promise<void> => {
         try {
-            const waitingGame = this.gameManager.getWaitingGame();
+            const activeGame = this.gameManager.getActiveGame();
 
-            if (!waitingGame) {
+            const gameEngine =
+                activeGame ?? this.gameManager.getWaitingGame();
+
+            if (!gameEngine) {
                 res.status(404).json({
                     success: false,
                     error: {
-                        code: "NO_CURRENT_GAME",
+                        code: "GAME_NOT_FOUND",
                         message: "No current game is available.",
                     },
                 });
                 return;
             }
-
-            const game = waitingGame.getGame();
+            const game = gameEngine.getGame();
 
             res.status(200).json({
                 success: true,
@@ -149,7 +153,15 @@ export class GameController {
             }
 
             await this.gameManager.saveGame(gameId);
-
+            this.realtimeService.emitToGame(
+                gameId,
+                RealtimeEvent.PLAYER_JOINED,
+                {
+                    gameId,
+                    playerId: req.userId,
+                    playerCount: game.playerTickets.length,
+                }
+            );
             const updatedGame = gameEngine.getGame();
 
             res.status(200).json({
@@ -198,6 +210,18 @@ export class GameController {
             gameEngine.removePlayer(req.userId);
 
             await this.gameManager.saveGame(gameId);
+
+            const game = this.gameManager.getGame(gameId).getGame();
+
+            this.realtimeService.emitToGame(
+                gameId,
+                RealtimeEvent.PLAYER_LEFT,
+                {
+                    gameId,
+                    playerId: req.userId,
+                    playerCount: game.playerTickets.length,
+                }
+            );
 
             res.status(200).json({
                 success: true,
@@ -787,6 +811,36 @@ export class GameController {
                     winner.type === type
             );
 
+            this.realtimeService.emitToGame(
+                gameId,
+                RealtimeEvent.WINNER_CLAIMED,
+                {
+                    gameId,
+                    playerId: req.userId,
+                    type: winner?.type,
+                    wonAt: winner?.wonAt,
+                }
+            );
+
+            if (
+                winner?.type === "FULL_HOUSE" &&
+                game.status === "COMPLETED"
+            ) {
+                this.realtimeService.emitToGame(
+                    gameId,
+                    RealtimeEvent.GAME_COMPLETED,
+                    {
+                        gameId,
+                        completedAt: game.completedAt,
+                        winner: {
+                            playerId: req.userId,
+                            type: winner?.type,
+                        },
+                    }
+                );
+
+                await this.gameManager.ensureWaitingGame();
+            }
             // -----------------------------------------
             // 9. Return success
             // -----------------------------------------
