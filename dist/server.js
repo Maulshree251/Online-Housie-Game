@@ -40,7 +40,7 @@ const announcementEngine = new announcementEngine_1.AnnouncementEngine(gameManag
         number,
         round: game.currentRound,
         announcedCount: game.numbersAnnouncedThisRound,
-        totalNumbers: game.announcedNumbers.length,
+        totalNumbers: game.config.numbersPerRound,
     });
 }, (gameId, round) => {
     realtimeService.emitToGame(gameId, realtimeEvents_1.RealtimeEvent.ROUND_COMPLETED, {

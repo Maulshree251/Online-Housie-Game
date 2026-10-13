@@ -128,6 +128,10 @@ describe("Weekly Game Lifecycle", () => {
                     .getGame(gameId)
                     .getGame();
 
+            expect(
+                announcementEngine.isRunning(gameId)
+            ).toBe(false);
+
             expect(game.status).toBe(
                 "ACTIVE"
             );

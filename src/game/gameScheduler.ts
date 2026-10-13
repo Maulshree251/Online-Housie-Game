@@ -115,11 +115,29 @@ export class GameScheduler {
                 `Continuing game ${game.id}, ` +
                 `starting Round ${game.currentRound + 1}.`
             );
+            console.log(
+                "[SCHEDULER] Active game:",
+                game.id,
+                "Round:",
+                game.currentRound,
+                "Round complete:",
+                activeGame.isRoundComplete()
+            );
+            console.log(
+                "[SCHEDULER] Starting next round..."
+            );
+
 
             if (activeGame.isRoundComplete()) {
                 activeGame.startNextRound();
 
                 await this.gameManager.saveGame(game.id);
+
+                console.log(
+                    "[SCHEDULER] Emitting ROUND_STARTED:",
+                    game.currentRound
+                );
+
                 this.realtimeService.emitToGame(
                     game.id,
                     RealtimeEvent.ROUND_STARTED,

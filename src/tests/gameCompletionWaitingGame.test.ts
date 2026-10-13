@@ -59,6 +59,33 @@ describe("Game completion → next waiting game", () => {
         // Create next waiting game
         await gameManager.ensureWaitingGame();
 
+
+        // Calling ensureWaitingGame again must reuse
+        // the existing waiting game, not create another.
+        const firstWaitingGame =
+            gameManager.getWaitingGame();
+
+        expect(firstWaitingGame).not.toBeNull();
+
+        const secondEnsureResult =
+            await gameManager.ensureWaitingGame();
+
+        expect(secondEnsureResult).not.toBeNull();
+
+        expect(
+            secondEnsureResult!.getGame().id
+        ).toBe(firstWaitingGame!.getGame().id);
+
+        // Only one waiting game should exist in MongoDB.
+        const waitingGamesAfterSecondEnsure =
+            await GameModel.find({
+                status: "WAITING",
+            }).lean();
+
+        expect(
+            waitingGamesAfterSecondEnsure.length
+        ).toBe(1);
+
         // Verify completed game is still present
         const completedGame = await GameModel.findOne({
             id: game.id,

@@ -98,58 +98,55 @@ describe("Active Game Recovery", () => {
             const remainingNumbersBeforeRecovery =
                 [...game.remainingNumbers];
 
+
             // --------------------------------
             // MARK A NUMBER
             // --------------------------------
 
             const player =
                 game.playerTickets.find(
-                    (p) =>
-                        p.playerId === playerId
+                    (p) => p.playerId === playerId
                 );
 
             if (!player) {
-                throw new Error(
-                    "Player ticket not found."
-                );
+                throw new Error("Player ticket not found.");
             }
 
-            const ticketNumbers =
-                player.ticket
-                    .flat()
-                    .filter(
-                        (
-                            number
-                        ): number is number =>
-                            number !== null
-                    );
-
-            // Find one ticket number that
-            // has actually been announced.
-            const markableNumber =
-                ticketNumbers.find(
-                    (number) =>
-                        game.announcedNumbers.includes(
-                            number
-                        )
+            // Ensure the test has an announced number
+            // that also exists on the player's ticket.
+            const ticketNumbers = player.ticket
+                .flat()
+                .filter(
+                    (number): number is number =>
+                        number !== null
                 );
 
-            if (markableNumber === undefined) {
-                throw new Error(
-                    "No announced ticket number available for marking."
-                );
-            }
-
-            gameEngine.markNumber(
-                playerId,
-                markableNumber
+            let markableNumber = ticketNumbers.find(
+                (number) =>
+                    game.announcedNumbers.includes(number)
             );
 
+            // If there is no overlap, announce more numbers
+            // until a ticket number is announced.
+            while (markableNumber === undefined) {
+                gameEngine.announceNextNumber();
+
+                markableNumber = ticketNumbers.find(
+                    (number) =>
+                        game.announcedNumbers.includes(number)
+                );
+            }
+
+            const announcedCountBeforeRecovery =
+                game.numbersAnnouncedThisRound;
+
+            gameEngine.markNumber(playerId, markableNumber);
+
             expect(
-                player.markedNumbers.has(
-                    markableNumber
-                )
+                player.markedNumbers.has(markableNumber)
             ).toBe(true);
+
+
 
             // --------------------------------
             // SAVE ACTIVE GAME
@@ -302,6 +299,40 @@ describe("Active Game Recovery", () => {
             expect(
                 recoveredPlayer.markedNumbers.size
             ).toBe(1);
+
+
+            // --------------------------------
+            // VERIFY GAME CAN CONTINUE AFTER RECOVERY
+            // --------------------------------
+
+            const nextNumber =
+                recoveredGameEngine.announceNextNumber();
+            expect(
+                recoveredGame.numbersAnnouncedThisRound
+            ).toBe(announcedCountBeforeRecovery + 1);
+            expect(nextNumber).toBeGreaterThanOrEqual(1);
+            expect(nextNumber).toBeLessThanOrEqual(90);
+
+            expect(
+                recoveredGame.numbersAnnouncedThisRound
+            ).toBe(6);
+
+            expect(
+                recoveredGame.announcedNumbers
+            ).toHaveLength(6);
+
+            expect(
+                new Set(recoveredGame.announcedNumbers).size
+            ).toBe(6);
+
+            // Persist the recovered game's new state.
+            await restartedGameManager.saveGame(game.id);
+
+            const updatedDocument =
+                await gameRepository.findById(game.id);
+
+            expect(updatedDocument).not.toBeNull();
+            expect(updatedDocument!.numbersAnnouncedThisRound).toBe(6);
 
             console.log(
                 "🎉 Active game recovery test passed!"

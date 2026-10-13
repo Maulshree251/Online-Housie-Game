@@ -59,7 +59,7 @@ const announcementEngine = new AnnouncementEngine(
         number,
         round: game.currentRound,
         announcedCount: game.numbersAnnouncedThisRound,
-        totalNumbers: game.announcedNumbers.length,
+        totalNumbers: game.config.numbersPerRound,
       }
     );
   },

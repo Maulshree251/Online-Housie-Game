@@ -1,88 +1,263 @@
 
-import { GameRepository } from "../repositories/gameRepository";
-import assert from "assert";
+
+import { GameScheduler } from "../game/gameScheduler";
 import { GameManager } from "../game/gameManager";
+import { AnnouncementEngine } from "../game/announcementEngine";
+import { RealtimeService } from "../realtime/realtimeService";
+import { RealtimeEvent } from "../realtime/realtimeEvents";
+import { GameScheduleConfig } from "../config/gameSchedule";
 
-async function testCreateGame(): Promise<void> {
-    const manager = new GameManager();
+describe("GameScheduler", () => {
+    let scheduler: GameScheduler;
 
-    const game = await manager.createGame();
-    const gameId = game.getGame().id;
+    let gameManager: {
+        getActiveGame: jest.Mock;
+        getWaitingGame: jest.Mock;
+        saveGame: jest.Mock;
+    };
 
-    assert.ok(gameId);
-    assert.strictEqual(manager.hasGame(gameId), true);
+    let announcementEngine: {
+        runWeeklyRound: jest.Mock;
+    };
 
-    console.log("✅ Create game test passed");
-}
+    let realtimeService: {
+        emitToGame: jest.Mock;
+    };
 
-async function testGetGame(): Promise<void> {
-    const manager = new GameManager();
+    let now: Date;
+    let activeGame: any;
+    let waitingGame: any;
 
-    const createdGame = await manager.createGame();
-    const gameId = createdGame.getGame().id;
+    const config: GameScheduleConfig = {
+        dayOfWeek: 6,
+        hour: 22,
+        minute: 0,
+        maxPlayers: 2,
+        minPlayers: 1,
+        announcementIntervalInSeconds: 10,
+        numbersPerRound: 10,
+        autoCreateNextGame: false
+    };
 
-    const retrievedGame = manager.getGame(gameId);
+    const createGameEngineMock = (
+        overrides: Record<string, any> = {}
+    ) => {
+        const game = {
+            id: "game-1",
+            status: "ACTIVE",
+            currentRound: 1,
+            roundStartedAt: new Date("2026-10-10T22:00:00"),
+            playerTickets: [{ playerId: "player-1" }, { playerId: "player-2" }],
+            config: {
+                minPlayers: 2,
+                numbersPerRound: 10,
+                announcementIntervalInSeconds: 0,
+            },
+            ...overrides,
+        };
 
-    assert.strictEqual(
-        retrievedGame.getGame().id,
-        gameId
-    );
+        return {
+            getGame: jest.fn(() => game),
+            isRoundComplete: jest.fn(() => false),
+            startNextRound: jest.fn(() => {
+                game.currentRound += 1;
+                game.roundStartedAt = new Date(now);
+            }),
+            startGame: jest.fn(() => {
+                game.status = "ACTIVE";
+                game.currentRound = 1;
+                game.roundStartedAt = new Date(now);
+            }),
+            game,
+        };
+    };
 
-    console.log("✅ Get game test passed");
-}
+    const createScheduler = () => {
+        scheduler = new GameScheduler(
+            gameManager as unknown as GameManager,
+            announcementEngine as unknown as AnnouncementEngine,
+            config,
+            realtimeService as unknown as RealtimeService,
+            () => new Date(now)
+        );
+    };
 
-async function testMultipleGames(): Promise<void> {
-    const manager = new GameManager();
+    beforeEach(() => {
+        jest.useFakeTimers();
 
-    const game1 = await manager.createGame();
-    const game2 = await manager.createGame();
+        now = new Date("2026-10-10T22:00:00");
 
-    const game1Id = game1.getGame().id;
-    const game2Id = game2.getGame().id;
+        activeGame = null;
+        waitingGame = null;
 
-    assert.notStrictEqual(game1Id, game2Id);
-    assert.strictEqual(manager.getAllGames().length, 2);
+        gameManager = {
+            getActiveGame: jest.fn(() => activeGame),
+            getWaitingGame: jest.fn(() => waitingGame),
+            saveGame: jest.fn().mockResolvedValue(undefined),
+        };
 
-    console.log("✅ Multiple games test passed");
-}
+        announcementEngine = {
+            runWeeklyRound: jest.fn().mockResolvedValue(undefined),
+        };
 
-async function testRemoveGame(): Promise<void> {
-    const manager = new GameManager();
+        realtimeService = {
+            emitToGame: jest.fn(),
+        };
 
-    const game = await manager.createGame();
-    const gameId = game.getGame().id;
+        createScheduler();
 
-    const removed = manager.removeGame(gameId);
+        jest.spyOn(console, "log").mockImplementation(() => { });
+        jest.spyOn(console, "error").mockImplementation(() => { });
+    });
 
-    assert.strictEqual(removed, true);
-    assert.strictEqual(manager.hasGame(gameId), false);
+    afterEach(() => {
+        scheduler?.stop();
+        jest.clearAllTimers();
+        jest.restoreAllMocks();
+        jest.useRealTimers();
+    });
 
-    console.log("✅ Remove game test passed");
-}
+    it("does not start a round before the configured schedule", async () => {
+        now = new Date("2026-10-10T21:59:00");
 
-function testGameNotFound(): void {
-    const manager = new GameManager();
+        waitingGame = createGameEngineMock({
+            status: "WAITING",
+        });
 
-    assert.throws(
-        () => {
-            manager.getGame("invalid-game-id");
-        },
-        /Game not found/
-    );
+        scheduler.start();
 
-    console.log("✅ Game not found test passed");
-}
+        await scheduler.waitForCurrentExecution();
 
-async function runTests(): Promise<void> {
-    console.log("\n===== GAME MANAGER TESTS =====\n");
+        expect(waitingGame.startGame).not.toHaveBeenCalled();
+        expect(announcementEngine.runWeeklyRound).not.toHaveBeenCalled();
+    });
 
-    await testCreateGame();
-    await testGetGame();
-    await testMultipleGames();
-    await testRemoveGame();
-    testGameNotFound();
+    it("starts an eligible waiting game at the scheduled time", async () => {
+        waitingGame = createGameEngineMock({
+            status: "WAITING",
+        });
 
-    console.log("\n🎉 All Game Manager tests passed!\n");
-}
+        scheduler.start();
 
-runTests();
+        await scheduler.waitForCurrentExecution();
+
+        expect(waitingGame.startGame).toHaveBeenCalledTimes(1);
+        expect(gameManager.saveGame).toHaveBeenCalledWith("game-1");
+
+        expect(realtimeService.emitToGame).toHaveBeenCalledWith(
+            "game-1",
+            RealtimeEvent.ROUND_STARTED,
+            expect.objectContaining({
+                gameId: "game-1",
+                round: 1,
+            })
+        );
+
+        expect(announcementEngine.runWeeklyRound)
+            .toHaveBeenCalledWith("game-1");
+    });
+
+    it("does not start a waiting game with too few players", async () => {
+        waitingGame = createGameEngineMock({
+            status: "WAITING",
+            playerTickets: [{ playerId: "player-1" }],
+        });
+
+        scheduler.start();
+
+        await scheduler.waitForCurrentExecution();
+
+        expect(waitingGame.startGame).not.toHaveBeenCalled();
+        expect(gameManager.saveGame).not.toHaveBeenCalled();
+        expect(announcementEngine.runWeeklyRound).not.toHaveBeenCalled();
+    });
+
+    it("advances a completed active round at the scheduled time", async () => {
+        activeGame = createGameEngineMock({
+            status: "ACTIVE",
+            currentRound: 1,
+        });
+
+        activeGame.isRoundComplete.mockReturnValue(true);
+
+        scheduler.start();
+
+        await scheduler.waitForCurrentExecution();
+
+        expect(activeGame.startNextRound).toHaveBeenCalledTimes(1);
+        expect(gameManager.saveGame).toHaveBeenCalledWith("game-1");
+
+        expect(realtimeService.emitToGame).toHaveBeenCalledWith(
+            "game-1",
+            RealtimeEvent.ROUND_STARTED,
+            expect.objectContaining({
+                gameId: "game-1",
+                round: 2,
+            })
+        );
+
+        expect(announcementEngine.runWeeklyRound)
+            .toHaveBeenCalledWith("game-1");
+    });
+
+    it("does not advance an incomplete active round", async () => {
+        activeGame = createGameEngineMock({
+            status: "ACTIVE",
+            currentRound: 1,
+        });
+
+        activeGame.isRoundComplete.mockReturnValue(false);
+
+        scheduler.start();
+
+        await scheduler.waitForCurrentExecution();
+
+        expect(activeGame.startNextRound).not.toHaveBeenCalled();
+        expect(gameManager.saveGame).not.toHaveBeenCalled();
+        expect(realtimeService.emitToGame).not.toHaveBeenCalled();
+
+        // The scheduler still calls the announcement engine.
+        // The engine itself decides whether to continue the current round.
+        expect(announcementEngine.runWeeklyRound)
+            .toHaveBeenCalledWith("game-1");
+    });
+
+    it("does nothing when there is no active or waiting game", async () => {
+        scheduler.start();
+
+        await scheduler.waitForCurrentExecution();
+
+        expect(gameManager.getActiveGame).toHaveBeenCalled();
+        expect(gameManager.getWaitingGame).toHaveBeenCalled();
+        expect(announcementEngine.runWeeklyRound).not.toHaveBeenCalled();
+    });
+
+    it("does not start a new round twice during the same scheduled minute", async () => {
+        activeGame = createGameEngineMock({
+            status: "ACTIVE",
+            currentRound: 1,
+        });
+
+        activeGame.isRoundComplete.mockReturnValue(true);
+
+        scheduler.start();
+        await scheduler.waitForCurrentExecution();
+
+        expect(activeGame.startNextRound).toHaveBeenCalledTimes(1);
+
+        // A second scheduler check in the same minute must not start
+        // another round.
+        await jest.advanceTimersByTimeAsync(1000);
+
+        expect(activeGame.startNextRound).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops the scheduler timer", async () => {
+        scheduler.start();
+        await scheduler.waitForCurrentExecution();
+
+        scheduler.stop();
+
+        expect(jest.getTimerCount()).toBe(0);
+    });
+});

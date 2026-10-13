@@ -28,11 +28,6 @@ describe("Full Game Lifecycle", () => {
 
         gameRepository = new GameRepository();
 
-        // Clean up any lingering games from previous runs to ensure test isolation
-        const lingeringGames = await gameRepository.findRecoverableGames();
-        for (const game of lingeringGames) {
-            await gameRepository.delete(game.id);
-        }
 
         gameManager =
             new GameManager(gameRepository);

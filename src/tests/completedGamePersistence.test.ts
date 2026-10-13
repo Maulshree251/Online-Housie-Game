@@ -287,6 +287,31 @@ describe("Completed Game Persistence", () => {
                 ])
             );
 
+
+            // --------------------------------
+            // VERIFY COMPLETED GAME IS NOT RECOVERED
+            // --------------------------------
+
+            const restartedGameManager =
+                new GameManager(gameRepository);
+
+            await restartedGameManager.recoverGames();
+
+            expect(
+                restartedGameManager.hasGame(game.id)
+            ).toBe(false);
+
+
+            // The completed history must still exist in MongoDB.
+            const historyDocument =
+                await GameModel.findOne({
+                    id: game.id,
+                }).lean();
+
+            expect(historyDocument).not.toBeNull();
+            expect(historyDocument!.status).toBe("COMPLETED");
+            expect(historyDocument!.winners).toHaveLength(5);
+
             console.log(
                 "🎉 Completed game persistence test passed!"
             );

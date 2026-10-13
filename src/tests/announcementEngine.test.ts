@@ -1,304 +1,175 @@
+
 import { AnnouncementEngine } from "../game/announcementEngine";
-import "dotenv/config";
-import { connectDatabase, disconnectDatabase } from "../database/connection";
 import { GameManager } from "../game/gameManager";
-import { GameRepository } from "../repositories/gameRepository";
-import { Ticket } from "../models/ticket";
 
-function createTestTicket(): Ticket {
-    return [
-        [1, 10, 20, 30, 40, null, null, null, null],
-        [2, null, 21, null, 41, 50, null, 70, null],
-        [3, null, null, 31, null, 51, 60, null, 80],
-    ];
-}
+describe("AnnouncementEngine", () => {
+    let engine: AnnouncementEngine;
+    let gameManager: {
+        getGame: jest.Mock;
+        saveGame: jest.Mock;
+    };
+    let onNumberAnnounced: jest.Mock;
+    let onRoundCompleted: jest.Mock;
 
-async function runTest(): Promise<void> {
-    console.log("\n=================================");
-    console.log(" Announcement Engine Tests");
-    console.log("=================================\n");
+    let game: any;
+    let gameEngine: {
+        getGame: jest.Mock;
+        isRoundComplete: jest.Mock;
+        announceNextNumber: jest.Mock;
+    };
 
-    /*
-     * ----------------------------------------
-     * TEST 1
-     * ----------------------------------------
-     * Create a game with a very small
-     * announcement interval.
-     */
-    await connectDatabase();
-    const repository = new GameRepository();
-    const gameManager = new GameManager(repository);
+    beforeEach(() => {
+        jest.useFakeTimers();
 
-    const gameEngine = await gameManager.createGame(
-        20, // max players
-        1,  // minimum players
-        10, // numbers per round
-        0  // 0 seconds for testing
-    );
+        game = {
+            id: "game-1",
+            status: "ACTIVE",
+            currentRound: 1,
+            numbersAnnouncedThisRound: 0,
+            config: {
+                numbersPerRound: 3,
+                announcementIntervalInSeconds: 1,
+            },
+        };
 
-    const gameId = gameEngine.getGame().id;
+        gameEngine = {
+            getGame: jest.fn(() => game),
+            isRoundComplete: jest.fn(
+                () => game.numbersAnnouncedThisRound >= game.config.numbersPerRound
+            ),
+            announceNextNumber: jest.fn(() => {
+                game.numbersAnnouncedThisRound++;
+                return game.numbersAnnouncedThisRound * 10;
+            }),
+        };
 
-    console.log(`Created test game: ${gameId}`);
+        gameManager = {
+            getGame: jest.fn(() => gameEngine),
+            saveGame: jest.fn().mockResolvedValue(undefined),
+        };
 
-    /*
-     * ----------------------------------------
-     * TEST 2
-     * ----------------------------------------
-     * Add a player.
-     */
+        onNumberAnnounced = jest.fn();
+        onRoundCompleted = jest.fn();
 
-    gameEngine.addPlayerTicket(
-        "player-1",
-        createTestTicket()
-    );
-
-    console.log("Player added.");
-
-    /*
-     * ----------------------------------------
-     * TEST 3
-     * ----------------------------------------
-     * Start the game.
-     */
-
-    gameEngine.assignHost("player-1");
-    gameEngine.startGame();
-
-    console.assert(
-        gameEngine.getGame().status === "ACTIVE",
-        "Game should be ACTIVE."
-    );
-
-    console.assert(
-        gameEngine.getGame().currentRound === 1,
-        "Game should start at Round 1."
-    );
-
-    console.log("Game started successfully.");
-
-    /*
-     * ----------------------------------------
-     * TEST 4
-     * ----------------------------------------
-     * Capture announced numbers.
-     */
-
-    const announcedNumbers: number[] = [];
-
-    const announcementEngine = new AnnouncementEngine(
-        gameManager,
-        (gameId, number) => {
-            console.log(
-                `Broadcast → Game ${gameId}: ${number}`
-            );
-
-            announcedNumbers.push(number);
-        }
-    );
-
-    /*
-     * ----------------------------------------
-     * TEST 5
-     * ----------------------------------------
-     * Run weekly announcement round.
-     */
-
-    await announcementEngine.runWeeklyRound(gameId);
-
-    /*
-     * ----------------------------------------
-     * TEST 6
-     * ----------------------------------------
-     * Exactly 10 numbers announced.
-     */
-
-    console.assert(
-        announcedNumbers.length === 10,
-        `Expected 10 numbers, got ${announcedNumbers.length}.`
-    );
-
-    console.log(
-        `✓ Exactly 10 numbers announced.`
-    );
-
-    /*
-     * ----------------------------------------
-     * TEST 7
-     * ----------------------------------------
-     * No duplicate numbers.
-     */
-
-    const uniqueNumbers = new Set(
-        announcedNumbers
-    );
-
-    console.assert(
-        uniqueNumbers.size === 10,
-        "Duplicate number was announced."
-    );
-
-    console.log(
-        "✓ No duplicate numbers."
-    );
-
-    /*
-     * ----------------------------------------
-     * TEST 8
-     * ----------------------------------------
-     * Game state should contain 10 announced
-     * numbers.
-     */
-
-    const game = gameEngine.getGame();
-
-    console.assert(
-        game.announcedNumbers.length === 10,
-        "Game should contain 10 announced numbers."
-    );
-
-    console.assert(
-        game.numbersAnnouncedThisRound === 10,
-        "Round counter should be 10."
-    );
-
-    console.assert(
-        game.currentRound === 1,
-        "Current round should still be 1."
-    );
-
-    console.log(
-        "✓ Game state correctly tracks Round 1."
-    );
-
-    /*
-     * ----------------------------------------
-     * TEST 9
-     * ----------------------------------------
-     * Round should be complete.
-     */
-
-    console.assert(
-        gameEngine.isRoundComplete() === true,
-        "Round should be complete."
-    );
-
-    console.log(
-        "✓ Round correctly completed."
-    );
-
-    /*
-     * ----------------------------------------
-     * TEST 10
-     * ----------------------------------------
-     * Attempting another announcement should
-     * fail.
-     */
-
-    let extraAnnouncementRejected = false;
-
-    try {
-        gameEngine.announceNextNumber();
-    } catch (error) {
-        extraAnnouncementRejected = true;
-
-        console.log(
-            "✓ 11th announcement correctly rejected."
+        engine = new AnnouncementEngine(
+            gameManager as unknown as GameManager,
+            onNumberAnnounced,
+            onRoundCompleted
         );
+
+        jest.spyOn(console, "log").mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        jest.clearAllTimers();
+        jest.restoreAllMocks();
+        jest.useRealTimers();
+    });
+
+    async function finishAnnouncements(): Promise<void> {
+        // Flush async work and advance the interval between announcements.
+        for (let i = 0; i < 10 && engine.isRunning("game-1"); i++) {
+            await Promise.resolve();
+            await jest.advanceTimersByTimeAsync(1000);
+        }
+
+        await Promise.resolve();
     }
 
-    console.assert(
-        extraAnnouncementRejected === true,
-        "11th announcement should be rejected."
-    );
+    it("announces the configured number of numbers and completes the round", async () => {
+        const result = engine.runWeeklyRound("game-1");
 
-    /*
-     * ----------------------------------------
-     * TEST 11
-     * ----------------------------------------
-     * Start next round.
-     */
+        await finishAnnouncements();
+        await result;
 
-    gameEngine.startNextRound();
+        expect(gameEngine.announceNextNumber).toHaveBeenCalledTimes(3);
+        expect(gameManager.saveGame).toHaveBeenCalledTimes(3);
+        expect(onNumberAnnounced).toHaveBeenCalledTimes(3);
+        expect(onRoundCompleted).toHaveBeenCalledWith("game-1", 1);
+        expect(engine.isRunning("game-1")).toBe(false);
+    });
 
-    const nextRoundGame = gameEngine.getGame();
+    it("does not run announcements when the game is not active", async () => {
+        game.status = "WAITING";
 
-    console.assert(
-        nextRoundGame.currentRound === 2,
-        "Game should move to Round 2."
-    );
+        await engine.runWeeklyRound("game-1");
 
-    console.assert(
-        nextRoundGame.numbersAnnouncedThisRound === 0,
-        "Round 2 should start with 0 announcements."
-    );
+        expect(gameEngine.announceNextNumber).not.toHaveBeenCalled();
+        expect(gameManager.saveGame).not.toHaveBeenCalled();
+        expect(onNumberAnnounced).not.toHaveBeenCalled();
+        expect(onRoundCompleted).not.toHaveBeenCalled();
+        expect(engine.isRunning("game-1")).toBe(false);
+    });
 
-    console.log(
-        "✓ Successfully moved to Round 2."
-    );
+    it("does not run two announcement loops for the same game", async () => {
+        game.config.numbersPerRound = 2;
 
-    /*
-     * ----------------------------------------
-     * TEST 12
-     * ----------------------------------------
-     * Announce one number in Round 2.
-     */
+        const firstRun = engine.runWeeklyRound("game-1");
 
-    const roundTwoAnnouncements: number[] = [];
+        // Allow the first call to reach its first wait.
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
 
-    const roundTwoEngine = new AnnouncementEngine(
-        gameManager,
-        (_, number) => {
-            roundTwoAnnouncements.push(number);
-        }
-    );
+        expect(engine.isRunning("game-1")).toBe(true);
 
-    await roundTwoEngine.runWeeklyRound(gameId);
+        await engine.runWeeklyRound("game-1");
 
-    console.assert(
-        roundTwoAnnouncements.length === 10,
-        "Round 2 should announce exactly 10 numbers."
-    );
+        expect(gameEngine.announceNextNumber).toHaveBeenCalledTimes(1);
 
-    console.log(
-        "✓ Round 2 announced exactly 10 numbers."
-    );
+        await finishAnnouncements();
+        await firstRun;
+    });
 
-    /*
-     * ----------------------------------------
-     * TEST 13
-     * ----------------------------------------
-     * Total announced numbers should now
-     * equal 20.
-     * ----------------------------------------
-     */
+    it("does not emit round completion before the round is complete", async () => {
+        game.config.numbersPerRound = 1;
 
-    const finalGame = gameEngine.getGame();
+        // Fail before the first number is announced.
+        gameEngine.announceNextNumber.mockImplementationOnce(() => {
+            throw new Error("Announcement failed");
+        });
 
-    console.assert(
-        finalGame.announcedNumbers.length === 20,
-        `Expected 20 total announcements, got ${finalGame.announcedNumbers.length}.`
-    );
+        await expect(
+            engine.runWeeklyRound("game-1")
+        ).rejects.toThrow("Announcement failed");
 
-    console.assert(
-        new Set(finalGame.announcedNumbers).size === 20,
-        "Duplicate number found across rounds."
-    );
+        expect(onRoundCompleted).not.toHaveBeenCalled();
+        expect(engine.isRunning("game-1")).toBe(false);
+    });
 
-    console.log(
-        "✓ No duplicate numbers across rounds."
-    );
+    it("releases the running lock if persistence fails", async () => {
+        gameManager.saveGame.mockRejectedValueOnce(
+            new Error("Database save failed")
+        );
 
-    console.log("\n=================================");
-    console.log(" 🎉 All Announcement Tests Passed!");
-    console.log("=================================\n");
-}
+        await expect(
+            engine.runWeeklyRound("game-1")
+        ).rejects.toThrow("Database save failed");
 
-runTest().catch((error) => {
-    console.error(
-        "\n❌ Announcement Engine Test Failed:"
-    );
+        expect(engine.isRunning("game-1")).toBe(false);
+        expect(onNumberAnnounced).not.toHaveBeenCalled();
+        expect(onRoundCompleted).not.toHaveBeenCalled();
+    });
 
-    console.error(error);
+    it("does not throw when the round completes without a completion callback", async () => {
+        game.config.numbersPerRound = 1;
+        game.config.announcementIntervalInSeconds = 0;
 
-    process.exit(1);
+        gameEngine.announceNextNumber.mockImplementation(() => {
+            game.numbersAnnouncedThisRound = 1;
+            return 42;
+        });
+
+        const engineWithoutCallback = new AnnouncementEngine(
+            gameManager as any,
+            onNumberAnnounced
+        );
+
+        await expect(
+            engineWithoutCallback.runWeeklyRound("game-1")
+        ).resolves.toBeUndefined();
+
+        expect(gameEngine.isRoundComplete()).toBe(true);
+        expect(engineWithoutCallback.isRunning("game-1")).toBe(false);
+    });
 });
